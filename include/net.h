@@ -4,10 +4,12 @@
 #include <sys/types.h>
 
 // Creates, binds, and sets a TCP socket to listening mode.
+// Supports both IPv4 and IPv6 (dual-stack).
 // Returns the server socket file descriptor, or -1 on failure.
 int net_create_listener(int port);
 
 // Initiates a TCP Three-Way Handshake with an active backend server.
+// Supports both IPv4 and IPv6 addresses.
 // Returns the connected socket file descriptor, or -1 on failure.
 int net_connect_to_backend(const char *ip, int port);
 

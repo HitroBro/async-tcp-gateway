@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "net.h"
 #include "logger.h"
 #include <stdio.h>
@@ -9,32 +11,63 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <netdb.h>
+#include <netinet/ip6.h>  // For IPV6_V6ONLY
 
+// Creates a dual-stack (IPv4/IPv6) listener socket
 int net_create_listener(int port) {
     int server_fd;
-    struct sockaddr_in server_addr;
+    struct addrinfo hints, *res, *rp;
+    char port_str[16];
 
-    server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd < 0) {
-        LOG_ERROR("Failed to create server socket: %s", strerror(errno));
+    snprintf(port_str, sizeof(port_str), "%d", port);
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;     // Allow IPv4 or IPv6
+    hints.ai_socktype = SOCK_STREAM; // TCP
+    hints.ai_flags = AI_PASSIVE;     // For bind on any address
+    hints.ai_protocol = 0;
+
+    int ret = getaddrinfo(NULL, port_str, &hints, &res);
+    if (ret != 0) {
+        LOG_ERROR("getaddrinfo failed for port %d: %s", port, gai_strerror(ret));
         return -1;
     }
 
     int opt = 1;
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        LOG_ERROR("Failed to set SO_REUSEADDR option: %s", strerror(errno));
+    for (rp = res; rp != NULL; rp = rp->ai_next) {
+        server_fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (server_fd < 0) {
+            continue;
+        }
+
+        // Allow socket reuse
+        if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+            LOG_ERROR("Failed to set SO_REUSEADDR option: %s", strerror(errno));
+            close(server_fd);
+            freeaddrinfo(res);
+            return -1;
+        }
+
+        // Enable dual-stack: allow IPv6 socket to accept IPv4 connections too
+        if (rp->ai_family == AF_INET6) {
+            int ipv6only = 0;
+            if (setsockopt(server_fd, IPPROTO_IPV6, IPV6_V6ONLY, &ipv6only, sizeof(ipv6only)) < 0) {
+                LOG_WARN("Failed to set IPV6_V6ONLY=0 (dual-stack may not work): %s", strerror(errno));
+            }
+        }
+
+        if (bind(server_fd, rp->ai_addr, rp->ai_addrlen) == 0) {
+            break; // Success
+        }
+
         close(server_fd);
-        return -1;
     }
 
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(port);
+    freeaddrinfo(res);
 
-    if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+    if (rp == NULL) {
         LOG_ERROR("Failed to bind socket to port %d: %s", port, strerror(errno));
-        close(server_fd);
         return -1;
     }
 
@@ -48,33 +81,43 @@ int net_create_listener(int port) {
     return server_fd;
 }
 
+// Connects to backend using getaddrinfo (supports IPv4 and IPv6)
 int net_connect_to_backend(const char *ip, int port) {
     int backend_fd;
-    struct sockaddr_in server_addr;
+    struct addrinfo hints, *res, *rp;
+    char port_str[16];
 
-    // 1. Create an active client socket
-    backend_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (backend_fd < 0) {
-        LOG_ERROR("Failed to create backend socket: %s", strerror(errno));
+    snprintf(port_str, sizeof(port_str), "%d", port);
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;     // Allow IPv4 or IPv6
+    hints.ai_socktype = SOCK_STREAM; // TCP
+    hints.ai_flags = 0;
+    hints.ai_protocol = 0;
+
+    int ret = getaddrinfo(ip, port_str, &hints, &res);
+    if (ret != 0) {
+        LOG_ERROR("getaddrinfo failed for %s:%d: %s", ip, port, gai_strerror(ret));
         return -1;
     }
 
-    // 2. Configure target backend address structure
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
+    for (rp = res; rp != NULL; rp = rp->ai_next) {
+        backend_fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (backend_fd < 0) {
+            continue;
+        }
 
-    // 3. Convert IPv4 string (e.g., "127.0.0.1") to binary network format
-    if (inet_pton(AF_INET, ip, &server_addr.sin_addr) <= 0) {
-        LOG_ERROR("Invalid backend IP address format: %s", ip);
+        if (connect(backend_fd, rp->ai_addr, rp->ai_addrlen) == 0) {
+            break; // Success
+        }
+
         close(backend_fd);
-        return -1;
     }
 
-    // 4. Initiate TCP Three-Way Handshake (Blocking call)
-    if (connect(backend_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+    freeaddrinfo(res);
+
+    if (rp == NULL) {
         LOG_ERROR("Failed to connect to backend %s:%d: %s", ip, port, strerror(errno));
-        close(backend_fd);
         return -1;
     }
 

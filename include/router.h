@@ -10,7 +10,7 @@ const BackendServer *router_select_backend(const Route *route);
 
 // Records a connection failure against a backend. If consecutive failures
 // reach the threshold, marks the server as DOWN (is_alive = 0).
-void router_mark_backend_down(BackendServer *backend);
+void router_mark_backend_down(BackendServer *backend, int max_consecutive_failures);
 
 // Records a successful handshake, resetting failure counters and marking ALIVE.
 void router_report_backend_success(BackendServer *backend);

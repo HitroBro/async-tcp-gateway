@@ -5,36 +5,51 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
+#include <getopt.h>
 
-#define CONFIG_PATH "config/gateway.conf"
+#define DEFAULT_CONFIG_PATH "config/gateway.conf"
 
-int main(void) {
+static void print_usage(const char *prog_name) {
+    fprintf(stderr, "Usage: %s [-c config_file]\n", prog_name);
+    fprintf(stderr, "  -c config_file   Path to configuration file (default: %s)\n", DEFAULT_CONFIG_PATH);
+    fprintf(stderr, "  -h               Show this help message\n");
+}
+
+int main(int argc, char *argv[]) {
+    const char *config_path = DEFAULT_CONFIG_PATH;
+    int opt;
+
+    while ((opt = getopt(argc, argv, "c:h")) != -1) {
+        switch (opt) {
+            case 'c':
+                config_path = optarg;
+                break;
+            case 'h':
+                print_usage(argv[0]);
+                return EXIT_SUCCESS;
+            default:
+                print_usage(argv[0]);
+                return EXIT_FAILURE;
+        }
+    }
+
     LOG_INFO("Starting 404_Team_not_Found High-Concurrency Layer 4 Traffic Gateway...");
 
     // 1. Load routing configuration
     GatewayConfig config;
-    if (config_load(CONFIG_PATH, &config) < 0) {
-        LOG_ERROR("Fatal: Could not load configuration from %s.", CONFIG_PATH);
+    if (config_load(config_path, &config) < 0) {
+        LOG_ERROR("Fatal: Could not load configuration from %s.", config_path);
         return EXIT_FAILURE;
     }
     config_print(&config);
 
-    // 2. Initialize primary listener on Route #1 (Port 8080)
-    Route *primary_route = &config.routes[0];
-    int server_fd = net_create_listener(primary_route->frontend_port);
-    if (server_fd < 0) {
-        LOG_ERROR("Fatal: Failed to start listener on port %d.", primary_route->frontend_port);
-        return EXIT_FAILURE;
-    }
-
-    LOG_INFO("Gateway listener bound to port %d.", primary_route->frontend_port);
     LOG_INFO("Handing control over to the Asynchronous Epoll Event Loop...");
 
-    // 3. Launch the high-concurrency event engine
-    int status = event_loop_run(server_fd, &config);
+    // 2. Launch the high-concurrency event engine (handles all routes)
+    int status = event_loop_run(&config);
 
-    // 4. Clean shutdown
-    close(server_fd);
+    // 3. Clean shutdown
     LOG_INFO("Gateway process terminated.");
     return (status == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

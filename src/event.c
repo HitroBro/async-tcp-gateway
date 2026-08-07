@@ -17,35 +17,71 @@
 #include <time.h>
 #include <sys/signalfd.h>
 #include <signal.h>
+#include <netdb.h>
 
 #define MAX_EVENTS 64
 
+// Listener context to map listener FD to its route
+typedef struct {
+    int fd;
+    const Route *route;
+} ListenerContext;
+
 // Internal forward declarations for event processing helpers
-static void handle_listener_event(int epoll_fd, int listener_fd, const GatewayConfig *config);
+static void handle_listener_event(int epoll_fd, EndpointToken *token, const GatewayConfig *config);
 static void handle_proxy_event(int epoll_fd, EndpointToken *token, uint32_t events);
 static int  initiate_backend_connection(int epoll_fd, ConnectionContext *ctx);
 static void process_socket_read(int epoll_fd, ConnectionContext *ctx, int from_fd, int to_fd, IOBuffer *buf);
 static void process_socket_write(int epoll_fd, ConnectionContext *ctx, int to_fd, int from_fd, IOBuffer *buf);
 static void update_epoll_interests(int epoll_fd, EndpointToken *token, uint32_t base_events, IOBuffer *buf);
 
-int event_loop_run(int listener_fd, const GatewayConfig *config) {
-    if (net_set_nonblocking(listener_fd) < 0) return -1;
-
+int event_loop_run(const GatewayConfig *config) {
     int epoll_fd = epoll_create1(0);
     if (epoll_fd < 0) {
         LOG_ERROR("Fatal: epoll_create1 failed: %s", strerror(errno));
         return -1;
     }
 
-    struct epoll_event ev;
-    memset(&ev, 0, sizeof(ev));
-    ev.events = EPOLLIN;
-    ev.data.fd = listener_fd; // For the listener, we safely use legacy .fd matching
+    // Create and register a listener for each route
+    for (int r = 0; r < config->route_count; r++) {
+        const Route *route = &config->routes[r];
+        int listener_fd = net_create_listener(route->frontend_port);
+        if (listener_fd < 0) {
+            LOG_ERROR("Fatal: Failed to start listener on port %d.", route->frontend_port);
+            close(epoll_fd);
+            return -1;
+        }
+        if (net_set_nonblocking(listener_fd) < 0) {
+            close(listener_fd);
+            close(epoll_fd);
+            return -1;
+        }
 
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listener_fd, &ev) < 0) {
-        LOG_ERROR("Fatal: Failed to add listener to epoll.");
-        close(epoll_fd);
-        return -1;
+        // Store route info in listener token
+        EndpointToken *listener_token = malloc(sizeof(EndpointToken));
+        if (!listener_token) {
+            LOG_ERROR("Fatal: Failed to allocate listener token for port %d.", route->frontend_port);
+            close(listener_fd);
+            close(epoll_fd);
+            return -1;
+        }
+        listener_token->fd = listener_fd;
+        listener_token->role = ROLE_LISTENER;
+        listener_token->parent = (ConnectionContext *)route; // Store route pointer in parent field
+
+        struct epoll_event ev;
+        memset(&ev, 0, sizeof(ev));
+        ev.events = EPOLLIN;
+        ev.data.ptr = listener_token;
+
+        if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listener_fd, &ev) < 0) {
+            LOG_ERROR("Fatal: Failed to add listener to epoll for port %d.", route->frontend_port);
+            free(listener_token);
+            close(listener_fd);
+            close(epoll_fd);
+            return -1;
+        }
+        LOG_INFO("Gateway listener bound to port %d.", route->frontend_port);
     }
 
     int timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
@@ -59,6 +95,7 @@ int event_loop_run(int listener_fd, const GatewayConfig *config) {
     sigemptyset(&mask);
     sigaddset(&mask, SIGINT);
     sigaddset(&mask, SIGTERM);
+    sigaddset(&mask, SIGUSR1);  // For metrics dump
     if (sigprocmask(SIG_BLOCK, &mask, NULL) < 0) {
         LOG_ERROR("Fatal: sigprocmask failed: %s", strerror(errno));
         close(timer_fd);
@@ -86,32 +123,35 @@ int event_loop_run(int listener_fd, const GatewayConfig *config) {
         return -1;
     }
 
-EndpointToken timer_token = { .fd = timer_fd, .role = ROLE_TIMER, .parent = NULL };
- ev.events = EPOLLIN;
- ev.data.ptr = &timer_token;
- if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, timer_fd, &ev) < 0) {
-     LOG_ERROR("Fatal: Failed to add timerfd to epoll: %s", strerror(errno));
-     close(timer_fd);
-     close(epoll_fd);
-     return -1;
- }
+    EndpointToken timer_token = { .fd = timer_fd, .role = ROLE_TIMER, .parent = NULL };
+    struct epoll_event ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.events = EPOLLIN;
+    ev.data.ptr = &timer_token;
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, timer_fd, &ev) < 0) {
+        LOG_ERROR("Fatal: Failed to add timerfd to epoll: %s", strerror(errno));
+        close(timer_fd);
+        close(epoll_fd);
+        return -1;
+    }
 
- EndpointToken sig_token = { .fd = sig_fd, .role = ROLE_SIGNAL, .parent = NULL };
- ev.events = EPOLLIN;
- ev.data.ptr = &sig_token;
- if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sig_fd, &ev) < 0) {
-     LOG_ERROR("Fatal: Failed to add signalfd to epoll: %s", strerror(errno));
-     close(sig_fd);
-     close(timer_fd);
-     close(epoll_fd);
-     return -1;
- }
+    EndpointToken sig_token = { .fd = sig_fd, .role = ROLE_SIGNAL, .parent = NULL };
+    memset(&ev, 0, sizeof(ev));
+    ev.events = EPOLLIN;
+    ev.data.ptr = &sig_token;
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sig_fd, &ev) < 0) {
+        LOG_ERROR("Fatal: Failed to add signalfd to epoll: %s", strerror(errno));
+        close(sig_fd);
+        close(timer_fd);
+        close(epoll_fd);
+        return -1;
+    }
 
- LOG_INFO("Asynchronous multi-client event loop fully initialized.");
- struct epoll_event events[MAX_EVENTS];
- int running = 1;
+    LOG_INFO("Asynchronous multi-client event loop fully initialized.");
+    struct epoll_event events[MAX_EVENTS];
+    int running = 1;
 
-while (running) {
+    while (running) {
         int n_ready = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
         if (n_ready < 0) {
             if (errno == EINTR) continue;
@@ -120,35 +160,37 @@ while (running) {
 
         for (int i = 0; i < n_ready && running; i++) {
             uint32_t active_events = events[i].events;
+            EndpointToken *token = (EndpointToken *)events[i].data.ptr;
 
-            // Scenario 1: Activity on our primary structural listening socket
-            if (events[i].data.fd == listener_fd) {
-                handle_listener_event(epoll_fd, listener_fd, config);
-            } 
-            // Scenario 2: Activity on a mapped client, backend, timer, or signal endpoint
-            else {
-                EndpointToken *token = (EndpointToken *)events[i].data.ptr;
-
-                if (token->role == ROLE_TIMER) {
-                  uint64_t expirations = 0;
-                  ssize_t bytes_read = read(timer_fd, &expirations, sizeof(expirations));
-                  if (bytes_read == sizeof(expirations)) {
-                      LOG_INFO("Background timer tick detected (expirations: %lu).", (unsigned long)expirations);
-                      router_sweep_health_probes(epoll_fd, (GatewayConfig *)config);
-                  }
-              } else if (token->role == ROLE_SIGNAL) {
-                  struct signalfd_siginfo fdsi;
-                  ssize_t s = read(sig_fd, &fdsi, sizeof(fdsi));
-                  if (s == sizeof(fdsi)) {
-                      LOG_INFO("Shutdown signal (%d) received. Initiating graceful teardown...", fdsi.ssi_signo);
-                  }
-                  running = 0;
-                  break;
-              } else if (token->role == ROLE_HEALTH_PROBE) {
-                  router_handle_probe_event(epoll_fd, token, active_events);
-              } else {
-                  handle_proxy_event(epoll_fd, token, active_events);
-              }
+            if (token->role == ROLE_TIMER) {
+                uint64_t expirations = 0;
+                ssize_t bytes_read = read(timer_fd, &expirations, sizeof(expirations));
+                if (bytes_read == sizeof(expirations)) {
+                    LOG_INFO("Background timer tick detected (expirations: %lu).", (unsigned long)expirations);
+                    router_sweep_health_probes(epoll_fd, (GatewayConfig *)config);
+                    conn_context_sweep_idle(epoll_fd);  // Check for idle connections
+                }
+            } else if (token->role == ROLE_SIGNAL) {
+                struct signalfd_siginfo fdsi;
+                ssize_t s = read(sig_fd, &fdsi, sizeof(fdsi));
+                if (s == sizeof(fdsi)) {
+                    if (fdsi.ssi_signo == SIGUSR1) {
+                        LOG_INFO("Metrics dump signal (SIGUSR1) received.");
+                        metrics_dump(config);
+                    } else {
+                        LOG_INFO("Shutdown signal (%d) received. Initiating graceful teardown...", fdsi.ssi_signo);
+                        running = 0;
+                        break;
+                    }
+                }
+            } else if (token->role == ROLE_HEALTH_PROBE) {
+                router_handle_probe_event(epoll_fd, token, active_events);
+            } else if (token->role == ROLE_LISTENER) {
+                // Listener socket (parent stores Route*)
+                handle_listener_event(epoll_fd, token, config);
+            } else {
+                // Client or backend socket
+                handle_proxy_event(epoll_fd, token, active_events);
             }
         }
         conn_context_sweep_cleanup();
@@ -160,10 +202,13 @@ while (running) {
             if (config->routes[r].backends[b].probe_fd >= 0) {
                 epoll_ctl(epoll_fd, EPOLL_CTL_DEL, config->routes[r].backends[b].probe_fd, NULL);
                 close(config->routes[r].backends[b].probe_fd);
-                // config->routes[r].backends[b].probe_fd = -1;
             }
         }
     }
+
+    // Clean up listener tokens
+    // Note: We can't easily iterate them, but they'll be closed when we close epoll_fd
+    // For proper cleanup, we'd need to track them. For now, just close epoll.
 
     conn_context_destroy_all(epoll_fd);
 
@@ -173,7 +218,10 @@ while (running) {
     return 0;
 }
 
-static void handle_listener_event(int epoll_fd, int listener_fd, const GatewayConfig *config) {
+static void handle_listener_event(int epoll_fd, EndpointToken *token, const GatewayConfig *config) {
+    const Route *route = (const Route *)token->parent;
+    int listener_fd = token->fd;
+    
     while (1) {
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
@@ -181,22 +229,22 @@ static void handle_listener_event(int epoll_fd, int listener_fd, const GatewayCo
         
         if (client_fd < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) break; // Ingestion queue drained
-            LOG_ERROR("Accept failed: %s", strerror(errno));
+            LOG_ERROR("Accept failed on port %d: %s", route->frontend_port, strerror(errno));
             break;
         }
 
         char client_ip[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
-        LOG_INFO("Accepted asynchronous connection from Client %s:%d (FD: %d)", 
-                 client_ip, ntohs(client_addr.sin_port), client_fd);
+        LOG_INFO("Accepted asynchronous connection from Client %s:%d (FD: %d) on port %d",
+                 client_ip, ntohs(client_addr.sin_port), client_fd, route->frontend_port);
 
         if (net_set_nonblocking(client_fd) < 0) {
             close(client_fd);
             continue;
         }
 
-        // Target route selection (Milestone 4 uses primary configuration route index 0)[cite: 1]
-        ConnectionContext *ctx = conn_context_create(client_fd, &config->routes[0]);
+        // Use the route this listener is bound to
+        ConnectionContext *ctx = conn_context_create(client_fd, route, config);
         if (!ctx) {
             close(client_fd);
             continue;
@@ -205,8 +253,7 @@ static void handle_listener_event(int epoll_fd, int listener_fd, const GatewayCo
         // Register client socket inside epoll using custom user-space pointer architecture
         struct epoll_event ev;
         memset(&ev, 0, sizeof(ev));
-        ev.events = EPOLLIN; // Listen for data from client[cite: 1]
-        // ev.data.ptr = ctx;   // Attach the memory context block!
+        ev.events = EPOLLIN; // Listen for data from client
         ev.data.ptr = &ctx->client_token;
 
         if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &ev) < 0) {
@@ -215,7 +262,7 @@ static void handle_listener_event(int epoll_fd, int listener_fd, const GatewayCo
             continue;
         }
 
-        // Immediately trigger the background connection sequence to the backend server[cite: 1]
+        // Immediately trigger the background connection sequence to the backend server
         if (initiate_backend_connection(epoll_fd, ctx) < 0) {
             conn_context_destroy(epoll_fd, ctx);
         }
@@ -249,38 +296,64 @@ static int initiate_backend_connection(int epoll_fd, ConnectionContext *ctx) {
         ctx->backend_fd = fd;
         ctx->backend_token.fd = fd;
 
-        struct sockaddr_in addr;
-        memset(&addr, 0, sizeof(addr));
-        addr.sin_family = AF_INET;
-        addr.sin_port = htons(target->port);
-        inet_pton(AF_INET, target->ip, &addr.sin_addr);
+        struct addrinfo hints, *res, *rp;
+        char port_str[16];
+        snprintf(port_str, sizeof(port_str), "%d", target->port);
 
-        LOG_DEBUG("Initiating connection to target %s:%d (Backend FD: %d)", target->ip, target->port, fd);
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = 0;
 
-        if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-            if (errno != EINPROGRESS) {
-                // IMMEDIATE HARD FAILURE (e.g., Connection Refused / Host Unreachable)
-                LOG_WARN("Immediate connect failure to %s:%d (%s). Triggering failover...", 
-                         target->ip, target->port, strerror(errno));
-                
-                router_mark_backend_down(ctx->target_backend); // Flag passive failure[cite: 1]
-                close(fd);
-                ctx->backend_fd = -1;
-                
-                continue; // Loop around and instantly try the next healthy backend in the pool![cite: 1]
+        int ret = getaddrinfo(target->ip, port_str, &hints, &res);
+        if (ret != 0) {
+            LOG_ERROR("getaddrinfo failed for %s:%d: %s", target->ip, target->port, gai_strerror(ret));
+            close(fd);
+            ctx->backend_fd = -1;
+            continue;
+        }
+
+        int connected = 0;
+        for (rp = res; rp != NULL; rp = rp->ai_next) {
+            // We already created the socket, so we need to connect with the right family
+            if (connect(fd, rp->ai_addr, rp->ai_addrlen) < 0) {
+                if (errno != EINPROGRESS) {
+                    LOG_DEBUG("Connection attempt to %s:%d failed (%s), trying next address",
+                              target->ip, target->port, strerror(errno));
+                    continue;
+                }
             }
-            // If errno == EINPROGRESS, the TCP handshake is proceeding asynchronously in the kernel.
-        } else {
-            // Immediate connection finalized (common on local loopback sockets)
-            ctx->state = CONN_STATE_ESTABLISHED;
-            router_report_backend_success(ctx->target_backend);
-            LOG_INFO("Immediate connection established to %s:%d.", target->ip, target->port);
+            connected = 1;
+            break;
+        }
+
+        freeaddrinfo(res);
+
+        if (!connected) {
+            LOG_WARN("Immediate connect failure to %s:%d. Triggering failover...",
+                     target->ip, target->port);
+            
+            router_mark_backend_down(ctx->target_backend, ctx->route->max_consecutive_failures);
+            close(fd);
+            ctx->backend_fd = -1;
+            
+            continue; // Loop around and instantly try the next healthy backend in the pool!
+        }
+
+        // If we got here, either connect succeeded immediately or EINPROGRESS
+        if (errno == EINPROGRESS || errno == 0) {
+            // Check if it succeeded immediately
+            if (errno == 0) {
+                // Immediate connection finalized (common on local loopback sockets)
+                ctx->state = CONN_STATE_ESTABLISHED;
+                router_report_backend_success(ctx->target_backend);
+                LOG_INFO("Immediate connection established to %s:%d.", target->ip, target->port);
+            }
         }
 
         struct epoll_event ev;
         memset(&ev, 0, sizeof(ev));
         ev.events = EPOLLIN | EPOLLOUT; // Monitor for readability (errors) and writability (handshake done)
-        // ev.data.ptr = ctx;
         ev.data.ptr = &ctx->backend_token;
 
         if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev) < 0) {
@@ -303,8 +376,8 @@ static void handle_proxy_event(int epoll_fd, EndpointToken *token, uint32_t even
     // Direct Error Trap Handlers
     if (events & (EPOLLERR | EPOLLHUP)) {
         LOG_WARN("Socket hardware hangup/error detected on FD %d.", ready_fd);
-        if (token->role == ROLE_BACKEND && ctx->target_backend) {
-            router_mark_backend_down(ctx->target_backend);
+        if (token->role == ROLE_BACKEND && ctx->target_backend && ctx->route) {
+            router_mark_backend_down(ctx->target_backend, ctx->route->max_consecutive_failures);
         }
         conn_context_destroy(epoll_fd, ctx);
         return;
@@ -317,14 +390,14 @@ static void handle_proxy_event(int epoll_fd, EndpointToken *token, uint32_t even
             socklen_t len = sizeof(socket_error);
 
             if (getsockopt(ready_fd, SOL_SOCKET, SO_ERROR, &socket_error, &len) < 0 || socket_error != 0) {
-                LOG_WARN("Asynchronous handshake rejected by %s:%d. Triggering failover...",
-                         ctx->target_backend->ip, ctx->target_backend->port);
-                
-                router_mark_backend_down(ctx->target_backend);
-                epoll_ctl(epoll_fd, EPOLL_CTL_DEL, ctx->backend_fd, NULL);
-                close(ctx->backend_fd);
-                ctx->backend_fd = -1;
-                ctx->backend_token.fd = -1;
+                            LOG_WARN("Asynchronous handshake rejected by %s:%d. Triggering failover...",
+                                     ctx->target_backend->ip, ctx->target_backend->port);
+               
+                            router_mark_backend_down(ctx->target_backend, ctx->route->max_consecutive_failures);
+                            epoll_ctl(epoll_fd, EPOLL_CTL_DEL, ctx->backend_fd, NULL);
+                            close(ctx->backend_fd);
+                            ctx->backend_fd = -1;
+                            ctx->backend_token.fd = -1;
 
                 if (initiate_backend_connection(epoll_fd, ctx) < 0) {
                     conn_context_destroy(epoll_fd, ctx);
@@ -357,15 +430,15 @@ static void handle_proxy_event(int epoll_fd, EndpointToken *token, uint32_t even
 
 static void process_socket_read(int epoll_fd, ConnectionContext *ctx, int from_fd, int to_fd, IOBuffer *buf) {
     while (1) {
-        size_t space = buf_available_space(buf);
+        size_t space = buf_contiguous_write(buf);
         if (space == 0) {
             EndpointToken *from_token = (from_fd == ctx->client_fd) ? &ctx->client_token : &ctx->backend_token;
 
             update_epoll_interests(epoll_fd, from_token, 0, buf);
             break;
-}
+        }
 
-        ssize_t bytes = recv(from_fd, buf->data + buf->tail, space, 0);
+        ssize_t bytes = recv(from_fd, buf_write_ptr(buf), space, 0);
         if (bytes == 0) {
             LOG_INFO("Graceful stream close detected via connection endpoint FD %d.", from_fd);
             conn_context_destroy(epoll_fd, ctx);
@@ -378,7 +451,9 @@ static void process_socket_read(int epoll_fd, ConnectionContext *ctx, int from_f
             return;
         }
 
-        buf->tail += bytes;
+        buf_advance_tail(buf, bytes);
+        ctx->last_activity = time(NULL);  // Update last activity timestamp on read
+        metrics_add_bytes_read(bytes);
         
         // Optimize: Attempt immediate transmission pass to maximize network throughput
         process_socket_write(epoll_fd, ctx, to_fd, from_fd, buf);
@@ -388,7 +463,8 @@ static void process_socket_read(int epoll_fd, ConnectionContext *ctx, int from_f
 
 static void process_socket_write(int epoll_fd, ConnectionContext *ctx, int to_fd, int from_fd, IOBuffer *buf) {
     while (buf_available_data(buf) > 0) {
-        ssize_t bytes = send(to_fd, buf->data + buf->head, buf_available_data(buf), MSG_NOSIGNAL);
+        size_t contig_read = buf_contiguous_read(buf);
+        ssize_t bytes = send(to_fd, buf_read_ptr(buf), contig_read, MSG_NOSIGNAL);
         
         if (bytes < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -404,12 +480,13 @@ static void process_socket_write(int epoll_fd, ConnectionContext *ctx, int to_fd
             return;
         }
 
-        buf->head += bytes;
+        buf_advance_head(buf, bytes);
+        ctx->last_activity = time(NULL);  // Update last activity timestamp on write
+        metrics_add_bytes_written(bytes);
     }
 
     // Buffer fully drained! Reset alignment tracking back to zero offsets
-    buf->head = 0;
-    buf->tail = 0;
+    buf_reset(buf);
 
     // Remove corporate interest in writable alerts to protect against looping spikes
     EndpointToken *to_token   = (to_fd == ctx->client_fd)   ? &ctx->client_token : &ctx->backend_token;

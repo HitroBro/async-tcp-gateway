@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "router.h"
 #include "logger.h"
 #include "net.h"
@@ -10,7 +12,7 @@
 #include <sys/socket.h>
 #include <sys/epoll.h>
 #include <arpa/inet.h>
-#define MAX_CONSECUTIVE_FAILURES 1 // Hard connection refusals trigger immediate failover
+#include <netdb.h>
 
 const BackendServer *router_select_backend(const Route *route) {
     if (!route || route->backend_count == 0) {
@@ -30,30 +32,31 @@ const BackendServer *router_select_backend(const Route *route) {
         
         // Only return the candidate if our passive health tracker says it is ALIVE!
         if (candidate->is_alive) {
-            LOG_DEBUG("Round-Robin selected Backend #%u -> %s:%d (Raw counter: %u)", 
+            LOG_DEBUG("Round-Robin selected Backend #%u -> %s:%d (Raw counter: %u)",
                       selected_idx + 1, candidate->ip, candidate->port, raw_idx);
             return candidate;
         }
         
-        LOG_DEBUG("Skipping unhealthy Backend #%u (%s:%d) - Marked DOWN.", 
+        LOG_DEBUG("Skipping unhealthy Backend #%u (%s:%d) - Marked DOWN.",
                   selected_idx + 1, candidate->ip, candidate->port);
     }
 
-    LOG_ERROR("All %d configured backends for port %d are currently DOWN!", 
+    LOG_ERROR("All %d configured backends for port %d are currently DOWN!",
               route->backend_count, route->frontend_port);
     return NULL;
 }
 
-void router_mark_backend_down(BackendServer *backend) {
+void router_mark_backend_down(BackendServer *backend, int max_consecutive_failures) {
     if (!backend || !backend->is_alive) return;
 
     backend->consecutive_failures++;
-    LOG_WARN("Connection failure recorded for Backend %s:%d (Consecutive failures: %d)", 
+    LOG_WARN("Connection failure recorded for Backend %s:%d (Consecutive failures: %d)",
              backend->ip, backend->port, backend->consecutive_failures);
+    metrics_increment_backend_failures();
 
-    if (backend->consecutive_failures >= MAX_CONSECUTIVE_FAILURES) {
+    if (backend->consecutive_failures >= max_consecutive_failures) {
         backend->is_alive = 0; // Evict from active Round-Robin rotation
-        LOG_ERROR("Backend %s:%d exceeded failure threshold! Marked DOWN.", 
+        LOG_ERROR("Backend %s:%d exceeded failure threshold! Marked DOWN.",
                   backend->ip, backend->port);
     }
 }
@@ -63,7 +66,7 @@ void router_report_backend_success(BackendServer *backend) {
 
     // If it was previously struggling or marked down, celebrate the recovery!
     if (backend->consecutive_failures > 0 || !backend->is_alive) {
-        LOG_INFO("Backend %s:%d responded successfully! Restoring to ALIVE status.", 
+        LOG_INFO("Backend %s:%d responded successfully! Restoring to ALIVE status.",
                  backend->ip, backend->port);
     }
     
@@ -87,7 +90,7 @@ void router_sweep_health_probes(int epoll_fd, GatewayConfig *config) {
 
             int fd = socket(AF_INET, SOCK_STREAM, 0);
             if (fd < 0) {
-                LOG_ERROR("Health probe socket creation failed for %s:%d: %s", 
+                LOG_ERROR("Health probe socket creation failed for %s:%d: %s",
                           backend->ip, backend->port, strerror(errno));
                 continue;
             }
@@ -97,37 +100,56 @@ void router_sweep_health_probes(int epoll_fd, GatewayConfig *config) {
                 continue;
             }
 
-            struct sockaddr_in addr;
-            memset(&addr, 0, sizeof(addr));
-            addr.sin_family = AF_INET;
-            addr.sin_port = htons(backend->port);
-            if (inet_pton(AF_INET, backend->ip, &addr.sin_addr) <= 0) {
-                LOG_ERROR("Invalid IP address for probe: %s", backend->ip);
+            struct addrinfo hints, *res, *rp;
+            char port_str[16];
+            snprintf(port_str, sizeof(port_str), "%d", backend->port);
+
+            memset(&hints, 0, sizeof(hints));
+            hints.ai_family = AF_UNSPEC;
+            hints.ai_socktype = SOCK_STREAM;
+            hints.ai_protocol = 0;
+
+            int ret = getaddrinfo(backend->ip, port_str, &hints, &res);
+            if (ret != 0) {
+                LOG_ERROR("getaddrinfo failed for %s:%d: %s", backend->ip, backend->port, gai_strerror(ret));
                 close(fd);
                 continue;
             }
 
-            LOG_INFO("Initiating background health probe to DOWN server %s:%d (Probe FD: %d)...", 
-                     backend->ip, backend->port, fd);
-
-            if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-                if (errno != EINPROGRESS) {
-                    // Immediate hard refusal (e.g., Host Unreachable / Connection Refused)
-                    LOG_DEBUG("Health probe immediate failure to %s:%d (%s). Will retry next tick.", 
-                              backend->ip, backend->port, strerror(errno));
-                    close(fd);
-                    continue; // Leave probe_fd == -1 so next timer tick tries again
+            int connected = 0;
+            for (rp = res; rp != NULL; rp = rp->ai_next) {
+                if (connect(fd, rp->ai_addr, rp->ai_addrlen) < 0) {
+                    if (errno != EINPROGRESS) {
+                        LOG_DEBUG("Health probe attempt to %s:%d failed (%s), trying next address",
+                                  backend->ip, backend->port, strerror(errno));
+                        continue;
+                    }
                 }
-            } else {
+                connected = 1;
+                break;
+            }
+
+            freeaddrinfo(res);
+
+            if (!connected) {
+                // Immediate hard refusal (e.g., Host Unreachable / Connection Refused)
+                LOG_DEBUG("Health probe immediate failure to %s:%d. Will retry next tick.",
+                          backend->ip, backend->port);
+                close(fd);
+                continue; // Leave probe_fd == -1 so next timer tick tries again
+            } else if (errno == 0) {
                 // Immediate connection success (common on loopback / localhost)!
-                LOG_INFO("Health probe immediately verified! Restoring %s:%d to ALIVE status.", 
+                LOG_INFO("Health probe immediately verified! Restoring %s:%d to ALIVE status.",
                          backend->ip, backend->port);
                 router_report_backend_success(backend);
+                metrics_increment_health_probes();
+                metrics_increment_health_probe_success();
                 close(fd);
                 continue;
             }
 
             // Asynchronous handshake in progress: Allocate ephemeral token and register in epoll
+            metrics_increment_health_probes();
             EndpointToken *probe_token = malloc(sizeof(EndpointToken));
             if (!probe_token) {
                 LOG_ERROR("Memory allocation failed for health probe token (%s:%d)", 

@@ -31,9 +31,18 @@ int config_load(const char *filepath, GatewayConfig *config) {
     // Zero out the entire structure to ensure clean defaults
     memset(config, 0, sizeof(GatewayConfig));
 
+    // Set default values for configurable limits
+    config->max_routes = MAX_ROUTES;
+    config->max_backends = MAX_BACKENDS;
+    config->max_active_connections = MAX_ACTIVE_CONNECTIONS;
+    config->io_buffer_size = IO_BUFFER_SIZE;
+    config->max_consecutive_failures = MAX_CONSECUTIVE_FAILURES;
+    config->connection_idle_timeout_secs = CONNECTION_IDLE_TIMEOUT_SECS;
+
     char line[MAX_LINE_LEN];
     Route *current_route = NULL;
     int line_num = 0;
+    int in_global_section = 1;  // Start in global section before first [route]
 
     while (fgets(line, sizeof(line), file)) {
         line_num++;
@@ -44,22 +53,30 @@ int config_load(const char *filepath, GatewayConfig *config) {
             continue;
         }
 
-        // Check for a new section header: [route]
-        if (strcmp(trimmed, "[route]") == 0) {
-            if (config->route_count >= MAX_ROUTES) {
-                LOG_WARN("Max routes (%d) reached at line %d. Ignoring further routes.", MAX_ROUTES, line_num);
+        // Check for a new section header: [route] or [global]
+        if (trimmed[0] == '[') {
+            if (strcmp(trimmed, "[route]") == 0) {
+                in_global_section = 0;
+                if (config->route_count >= config->max_routes) {
+                    LOG_WARN("Max routes (%d) reached at line %d. Ignoring further routes.", config->max_routes, line_num);
+                    current_route = NULL;
+                    continue;
+                }
+                current_route = &config->routes[config->route_count];
+                config->route_count++;
+                // Inherit global max_consecutive_failures by default
+                current_route->max_consecutive_failures = config->max_consecutive_failures;
+                continue;
+            } else if (strcmp(trimmed, "[global]") == 0) {
+                in_global_section = 1;
+                current_route = NULL;
+                continue;
+            } else {
+                LOG_WARN("Unknown section '%s' on line %d. Ignoring.", trimmed, line_num);
+                in_global_section = 0;
                 current_route = NULL;
                 continue;
             }
-            current_route = &config->routes[config->route_count];
-            config->route_count++;
-            continue;
-        }
-
-        // If we haven't encountered a [route] tag yet, key-value pairs are invalid
-        if (!current_route) {
-            LOG_WARN("Syntax error on line %d: Property defined outside of a [route] block.", line_num);
-            continue;
         }
 
         // Parse key = value
@@ -74,31 +91,64 @@ int config_load(const char *filepath, GatewayConfig *config) {
         key = trim_whitespace(key);
         val = trim_whitespace(val);
 
-        if (strcmp(key, "frontend_port") == 0) {
-            current_route->frontend_port = atoi(val);
-        } 
-        else if (strcmp(key, "backend") == 0) {
-            if (current_route->backend_count >= MAX_BACKENDS) {
-                LOG_WARN("Max backends (%d) reached for port %d.", MAX_BACKENDS, current_route->frontend_port);
+        if (in_global_section) {
+            // Global configuration options
+            if (strcmp(key, "max_routes") == 0) {
+                config->max_routes = atoi(val);
+                if (config->max_routes > MAX_ROUTES) {
+                    LOG_WARN("max_routes (%d) exceeds compile-time maximum (%d), capping.", config->max_routes, MAX_ROUTES);
+                    config->max_routes = MAX_ROUTES;
+                }
+            } else if (strcmp(key, "max_backends") == 0) {
+                config->max_backends = atoi(val);
+                if (config->max_backends > MAX_BACKENDS) {
+                    LOG_WARN("max_backends (%d) exceeds compile-time maximum (%d), capping.", config->max_backends, MAX_BACKENDS);
+                    config->max_backends = MAX_BACKENDS;
+                }
+            } else if (strcmp(key, "max_active_connections") == 0) {
+                config->max_active_connections = atoi(val);
+            } else if (strcmp(key, "io_buffer_size") == 0) {
+                config->io_buffer_size = atoi(val);
+            } else if (strcmp(key, "max_consecutive_failures") == 0) {
+                config->max_consecutive_failures = atoi(val);
+            } else if (strcmp(key, "connection_idle_timeout_secs") == 0) {
+                config->connection_idle_timeout_secs = atoi(val);
+            } else {
+                LOG_WARN("Unknown global configuration key '%s' on line %d.", key, line_num);
+            }
+        } else {
+            // Route-specific configuration
+            if (!current_route) {
+                LOG_WARN("Syntax error on line %d: Property defined outside of a [route] block.", line_num);
                 continue;
             }
 
-            BackendServer *backend = &current_route->backends[current_route->backend_count];
-            
-            // Parse IP:PORT safely using width specifier %15[^:] to prevent buffer overflows!
-            int parsed = sscanf(val, "%15[^:]:%d", backend->ip, &backend->port);
-            if (parsed == 2) {
-                backend->is_alive = 1;
-                backend->active_connections = 0;
-                backend->consecutive_failures = 0;
-                backend->probe_fd = -1; // -1 indicates NO active health check socket
-                current_route->backend_count++;
+            if (strcmp(key, "frontend_port") == 0) {
+                current_route->frontend_port = atoi(val);
+            } else if (strcmp(key, "backend") == 0) {
+                if (current_route->backend_count >= config->max_backends) {
+                    LOG_WARN("Max backends (%d) reached for port %d.", config->max_backends, current_route->frontend_port);
+                    continue;
+                }
+
+                BackendServer *backend = &current_route->backends[current_route->backend_count];
+                
+                // Parse IP:PORT safely using width specifier %15[^:] to prevent buffer overflows!
+                int parsed = sscanf(val, "%15[^:]:%d", backend->ip, &backend->port);
+                if (parsed == 2) {
+                    backend->is_alive = 1;
+                    backend->active_connections = 0;
+                    backend->consecutive_failures = 0;
+                    backend->probe_fd = -1; // -1 indicates NO active health check socket
+                    current_route->backend_count++;
+                } else {
+                    LOG_ERROR("Malformed backend target on line %d: %s (Expected format IP:PORT)", line_num, val);
+                }
+            } else if (strcmp(key, "max_consecutive_failures") == 0) {
+                current_route->max_consecutive_failures = atoi(val);
             } else {
-                LOG_ERROR("Malformed backend target on line %d: %s (Expected format IP:PORT)", line_num, val);
+                LOG_WARN("Unknown configuration key '%s' on line %d.", key, line_num);
             }
-        } 
-        else {
-            LOG_WARN("Unknown configuration key '%s' on line %d.", key, line_num);
         }
     }
 
