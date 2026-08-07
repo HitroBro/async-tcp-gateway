@@ -21,11 +21,10 @@
 
 #define MAX_EVENTS 64
 
-// Listener context to map listener FD to its route
-typedef struct {
-    int fd;
-    const Route *route;
-} ListenerContext;
+// Maximum listeners = MAX_ROUTES (max 10)
+#define MAX_LISTENERS 10
+static EndpointToken *listener_tokens[MAX_LISTENERS];
+static int listener_token_count = 0;
 
 // Internal forward declarations for event processing helpers
 static void handle_listener_event(int epoll_fd, EndpointToken *token, const GatewayConfig *config);
@@ -68,6 +67,11 @@ int event_loop_run(const GatewayConfig *config) {
         listener_token->fd = listener_fd;
         listener_token->role = ROLE_LISTENER;
         listener_token->parent = (ConnectionContext *)route; // Store route pointer in parent field
+
+        // Track listener token for cleanup
+        if (listener_token_count < MAX_LISTENERS) {
+            listener_tokens[listener_token_count++] = listener_token;
+        }
 
         struct epoll_event ev;
         memset(&ev, 0, sizeof(ev));
@@ -207,10 +211,12 @@ int event_loop_run(const GatewayConfig *config) {
     }
 
     // Clean up listener tokens
-    // Note: We can't easily iterate them, but they'll be closed when we close epoll_fd
-    // For proper cleanup, we'd need to track them. For now, just close epoll.
+        for (int i = 0; i < listener_token_count; i++) {
+            free(listener_tokens[i]);
+        }
+        listener_token_count = 0;
 
-    conn_context_destroy_all(epoll_fd);
+        conn_context_destroy_all(epoll_fd);
 
     close(sig_fd);
     close(timer_fd);
@@ -223,7 +229,7 @@ static void handle_listener_event(int epoll_fd, EndpointToken *token, const Gate
     int listener_fd = token->fd;
     
     while (1) {
-        struct sockaddr_in client_addr;
+        struct sockaddr_storage client_addr;
         socklen_t client_len = sizeof(client_addr);
         int client_fd = accept(listener_fd, (struct sockaddr *)&client_addr, &client_len);
         
@@ -233,10 +239,17 @@ static void handle_listener_event(int epoll_fd, EndpointToken *token, const Gate
             break;
         }
 
-        char client_ip[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
-        LOG_INFO("Accepted asynchronous connection from Client %s:%d (FD: %d) on port %d",
-                 client_ip, ntohs(client_addr.sin_port), client_fd, route->frontend_port);
+        char client_ip[INET6_ADDRSTRLEN];
+        char client_port[16];
+        if (getnameinfo((struct sockaddr *)&client_addr, client_len, 
+                        client_ip, sizeof(client_ip),
+                        client_port, sizeof(client_port),
+                        NI_NUMERICHOST | NI_NUMERICSERV) != 0) {
+            snprintf(client_ip, sizeof(client_ip), "unknown");
+            snprintf(client_port, sizeof(client_port), "unknown");
+        }
+        LOG_INFO("Accepted asynchronous connection from Client %s:%s (FD: %d) on port %d",
+                 client_ip, client_port, client_fd, route->frontend_port);
 
         if (net_set_nonblocking(client_fd) < 0) {
             close(client_fd);
@@ -282,19 +295,7 @@ static int initiate_backend_connection(int epoll_fd, ConnectionContext *ctx) {
         // Store the target pointer in our context so we know who we are talking to if async errors occur!
         ctx->target_backend = (BackendServer *)target;
 
-        int fd = socket(AF_INET, SOCK_STREAM, 0);
-        if (fd < 0) {
-            LOG_ERROR("Socket creation failed during backend initiation: %s", strerror(errno));
-            return -1;
-        }
-
-        if (net_set_nonblocking(fd) < 0) {
-            close(fd);
-            return -1;
-        }
-
-        ctx->backend_fd = fd;
-        ctx->backend_token.fd = fd;
+        int fd = -1;
 
         struct addrinfo hints, *res, *rp;
         char port_str[16];
@@ -308,18 +309,30 @@ static int initiate_backend_connection(int epoll_fd, ConnectionContext *ctx) {
         int ret = getaddrinfo(target->ip, port_str, &hints, &res);
         if (ret != 0) {
             LOG_ERROR("getaddrinfo failed for %s:%d: %s", target->ip, target->port, gai_strerror(ret));
-            close(fd);
             ctx->backend_fd = -1;
             continue;
         }
 
         int connected = 0;
+        int new_fd = -1;
         for (rp = res; rp != NULL; rp = rp->ai_next) {
-            // We already created the socket, so we need to connect with the right family
-            if (connect(fd, rp->ai_addr, rp->ai_addrlen) < 0) {
+            new_fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+            if (new_fd < 0) {
+                LOG_DEBUG("Connection attempt to %s:%d failed to create socket (%s), trying next address",
+                          target->ip, target->port, strerror(errno));
+                continue;
+            }
+
+            if (net_set_nonblocking(new_fd) < 0) {
+                close(new_fd);
+                continue;
+            }
+
+            if (connect(new_fd, rp->ai_addr, rp->ai_addrlen) < 0) {
                 if (errno != EINPROGRESS) {
                     LOG_DEBUG("Connection attempt to %s:%d failed (%s), trying next address",
                               target->ip, target->port, strerror(errno));
+                    close(new_fd);
                     continue;
                 }
             }
@@ -334,11 +347,17 @@ static int initiate_backend_connection(int epoll_fd, ConnectionContext *ctx) {
                      target->ip, target->port);
             
             router_mark_backend_down(ctx->target_backend, ctx->route->max_consecutive_failures);
-            close(fd);
+            if (fd >= 0) close(fd);
             ctx->backend_fd = -1;
             
             continue; // Loop around and instantly try the next healthy backend in the pool!
         }
+
+        // Use the successfully connected socket
+        if (fd >= 0) close(fd);
+        fd = new_fd;
+        ctx->backend_fd = fd;
+        ctx->backend_token.fd = fd;
 
         // If we got here, either connect succeeded immediately or EINPROGRESS
         if (errno == EINPROGRESS || errno == 0) {

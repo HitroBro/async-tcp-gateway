@@ -88,18 +88,6 @@ void router_sweep_health_probes(int epoll_fd, GatewayConfig *config) {
                 continue;
             }
 
-            int fd = socket(AF_INET, SOCK_STREAM, 0);
-            if (fd < 0) {
-                LOG_ERROR("Health probe socket creation failed for %s:%d: %s",
-                          backend->ip, backend->port, strerror(errno));
-                continue;
-            }
-
-            if (net_set_nonblocking(fd) < 0) {
-                close(fd);
-                continue;
-            }
-
             struct addrinfo hints, *res, *rp;
             char port_str[16];
             snprintf(port_str, sizeof(port_str), "%d", backend->port);
@@ -112,16 +100,31 @@ void router_sweep_health_probes(int epoll_fd, GatewayConfig *config) {
             int ret = getaddrinfo(backend->ip, port_str, &hints, &res);
             if (ret != 0) {
                 LOG_ERROR("getaddrinfo failed for %s:%d: %s", backend->ip, backend->port, gai_strerror(ret));
-                close(fd);
                 continue;
             }
 
             int connected = 0;
+            int fd = -1;
             for (rp = res; rp != NULL; rp = rp->ai_next) {
+                fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+                if (fd < 0) {
+                    LOG_DEBUG("Health probe socket creation failed for %s:%d: %s",
+                              backend->ip, backend->port, strerror(errno));
+                    continue;
+                }
+
+                if (net_set_nonblocking(fd) < 0) {
+                    close(fd);
+                    fd = -1;
+                    continue;
+                }
+
                 if (connect(fd, rp->ai_addr, rp->ai_addrlen) < 0) {
                     if (errno != EINPROGRESS) {
                         LOG_DEBUG("Health probe attempt to %s:%d failed (%s), trying next address",
                                   backend->ip, backend->port, strerror(errno));
+                        close(fd);
+                        fd = -1;
                         continue;
                     }
                 }
@@ -135,7 +138,7 @@ void router_sweep_health_probes(int epoll_fd, GatewayConfig *config) {
                 // Immediate hard refusal (e.g., Host Unreachable / Connection Refused)
                 LOG_DEBUG("Health probe immediate failure to %s:%d. Will retry next tick.",
                           backend->ip, backend->port);
-                close(fd);
+                if (fd >= 0) close(fd);
                 continue; // Leave probe_fd == -1 so next timer tick tries again
             } else if (errno == 0) {
                 // Immediate connection success (common on loopback / localhost)!
