@@ -1,0 +1,13 @@
+# Compiled Binaries and Object Files
+bin/
+*.o
+*.out
+*.exe
+
+# System and Editor Artifacts
+.DS_Store
+*.swp
+*~
+.vscode/
+.idea/
+test.conf
