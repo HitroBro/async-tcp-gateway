@@ -1,10 +1,18 @@
-# Async TCP Layer 4 Gateway
+# ⚡ Async TCP Layer 4 Gateway
 
-A high-concurrency, asynchronous Layer 4 TCP gateway/proxy written in C using `epoll`. Features round-robin load balancing, automatic failover, asynchronous health checks with auto-recovery, configurable limits, IPv6 dual-stack support, and metrics/observability.
+[![C](https://img.shields.io/badge/C-C11-blue?style=for-the-badge&logo=c&logoColor=white)](https://en.wikipedia.org/wiki/C11_(C_standard_revision))
+[![Linux](https://img.shields.io/badge/Linux-epoll%20%7C%20timerfd%20%7C%20signalfd-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://man7.org/linux/man-pages/man7/epoll.7.html)
+[![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)](Makefile)
+[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-Python%20suite-orange?style=for-the-badge&logo=python)](tests/)
 
-## Architecture Overview
+A high-concurrency, asynchronous **Layer 4 TCP gateway/proxy** written in C using `epoll`. Features round-robin load balancing, automatic failover, asynchronous health checks with auto-recovery, configurable limits, IPv6 dual-stack support, and metrics/observability.
 
-```
+---
+
+## 🏗 Architecture Overview
+
+```text
 Client → [Gateway:8080] → Backend Pool (127.0.0.1:9001, 127.0.0.1:9002, ...)
                     ↓
             epoll Event Loop
@@ -15,7 +23,9 @@ Client → [Gateway:8080] → Backend Pool (127.0.0.1:9001, 127.0.0.1:9002, ...)
             └── Signal handling (signalfd)
 ```
 
-## Features
+---
+
+## ✨ Features
 
 | Feature | Description |
 |---------|-------------|
@@ -37,9 +47,11 @@ Client → [Gateway:8080] → Backend Pool (127.0.0.1:9001, 127.0.0.1:9002, ...)
 | **Monotonic Clock** | `CLOCK_MONOTONIC` for idle timeout (NTP-safe) |
 | **Atomic Metrics** | Lock-free counters using C11 `_Atomic` for thread safety |
 
-## Project Structure
+---
 
-```
+## 📁 Project Structure
+
+```text
 .
 ├── include/
 │   ├── config.h      # Config structures (Route, BackendServer, GatewayConfig)
@@ -61,10 +73,13 @@ Client → [Gateway:8080] → Backend Pool (127.0.0.1:9001, 127.0.0.1:9002, ...)
 │   └── test_client.py    # Automated test client
 ├── config/gateway.conf   # Production config (optional)
 ├── Makefile
+├── LICENSE
 └── README.md
 ```
 
-## Quick Start
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 - Linux with `epoll`, `timerfd`, `signalfd` (kernel 2.6.27+)
@@ -72,7 +87,6 @@ Client → [Gateway:8080] → Backend Pool (127.0.0.1:9001, 127.0.0.1:9002, ...)
 - Python 3 (for test tools)
 
 ### Build
-
 ```bash
 make
 # Output: bin/gateway
@@ -115,7 +129,9 @@ python3 tests/mock_backend.py -p 9003 &  # Start after gateway
 # Gateway will detect it within 5s via health probe
 ```
 
-## Configuration
+---
+
+## ⚙️ Configuration
 
 Create a config file (e.g., `config/gateway.conf`):
 
@@ -158,10 +174,12 @@ Run with custom config:
 #   -h               Show this help message
 ```
 
-## Design Highlights
+---
+
+## 🧠 Design Highlights
 
 ### Connection State Machine
-```
+```text
 CONN_STATE_CONNECTING  →  CONN_STATE_ESTABLISHED  →  CONN_STATE_CLOSING
        ↑                      ↓                         ↓
    async connect         bidirectional           cleanup +
@@ -197,30 +215,38 @@ Output includes:
 - Backend failures, health probes initiated/succeeded
 - Per-route backend status (ALIVE/DOWN, active connections, failure count)
 
-## Performance Notes
+---
 
-- **Ring buffer size**: 8KB (configurable via `io_buffer_size`)
-- **Max events per `epoll_wait`**: 256 (`MAX_EVENTS`, increased from 64)
-- **Max concurrent connections**: 1024 (configurable via `max_active_connections`, dynamic allocation up to 65536)
-- **Max routes/backends**: 10 each (configurable via `max_routes`, `max_backends`)
-- **Failure threshold**: 1 consecutive failure → immediate `DOWN` (configurable)
-- **Idle timeout resolution**: 1 second (using `CLOCK_MONOTONIC`)
-- **Rate limiting**: Token bucket algorithm (global + per-IP)
+## 📊 Performance Notes
 
-## Limitations
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| **Ring buffer size** | 8KB | Configurable via `io_buffer_size` |
+| **Max events per `epoll_wait`** | 256 | `MAX_EVENTS`, increased from 64 |
+| **Max concurrent connections** | 1024 | Configurable via `max_active_connections`, dynamic up to 65536 |
+| **Max routes/backends** | 10 each | Configurable via `max_routes`, `max_backends` |
+| **Failure threshold** | 1 | Consecutive failures → immediate `DOWN` (configurable) |
+| **Idle timeout resolution** | 1 second | Using `CLOCK_MONOTONIC` |
+| **Rate limiting** | Token bucket | Global + per-IP |
+
+---
+
+## ⚠️ Limitations
 
 - **Layer 4 only**: This is a TCP proxy (Layer 4). It does not terminate TLS/SSL. For HTTPS, deploy a TLS terminator (e.g., nginx, HAProxy) in front, or use a Layer 7 proxy.
 - **Single-threaded**: The event loop runs on a single CPU core. For multi-core scaling, run multiple instances with `SO_REUSEPORT` (configurable).
 - **No HTTP/2 or WebSocket awareness**: Pure TCP stream proxy.
 
-## License
+---
 
-MIT License - Feel free to use, modify, and distribute.
+## 📄 License
 
-## Contributing
+MIT License — Feel free to use, modify, and distribute.
+
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Ensure `make` builds cleanly (`-Wall -Wextra -pedantic`)
+3. Ensure `make` builds cleanly (`-Wall -Wextra -pedantic -std=c11`)
 4. Test with the provided Python test suite
 5. Submit a pull request
