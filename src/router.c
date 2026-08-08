@@ -25,7 +25,8 @@ const BackendServer *router_select_backend(const Route *route) {
     // Bounded O(N) search loop: We check at most 'backend_count' times to find a healthy server.
     // This prevents infinite loops if every single server in the cluster is marked DOWN!
     for (int i = 0; i < route->backend_count; i++) {
-        unsigned int raw_idx = (unsigned int)atomic_fetch_add((_Atomic int *)&mutable_route->current_backend_idx, 1);
+        // C1 FIX: Use atomic_fetch_add on _Atomic int field directly (no cast needed)
+        unsigned int raw_idx = (unsigned int)atomic_fetch_add(&mutable_route->current_backend_idx, 1);
         unsigned int selected_idx = raw_idx % (unsigned int)route->backend_count;
 
         BackendServer *candidate = &mutable_route->backends[selected_idx];
@@ -88,59 +89,15 @@ void router_sweep_health_probes(int epoll_fd, GatewayConfig *config) {
                 continue;
             }
 
-            struct addrinfo hints, *res, *rp;
-            char port_str[16];
-            snprintf(port_str, sizeof(port_str), "%d", backend->port);
-
-            memset(&hints, 0, sizeof(hints));
-            hints.ai_family = AF_UNSPEC;
-            hints.ai_socktype = SOCK_STREAM;
-            hints.ai_protocol = 0;
-
-            int ret = getaddrinfo(backend->ip, port_str, &hints, &res);
-            if (ret != 0) {
-                LOG_ERROR("getaddrinfo failed for %s:%d: %s", backend->ip, backend->port, gai_strerror(ret));
-                continue;
-            }
-
-            int connected = 0;
+            // M2: Use shared async connect helper
             int fd = -1;
-            for (rp = res; rp != NULL; rp = rp->ai_next) {
-                fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-                if (fd < 0) {
-                    LOG_DEBUG("Health probe socket creation failed for %s:%d: %s",
-                              backend->ip, backend->port, strerror(errno));
-                    continue;
-                }
-
-                if (net_set_nonblocking(fd) < 0) {
-                    close(fd);
-                    fd = -1;
-                    continue;
-                }
-
-                if (connect(fd, rp->ai_addr, rp->ai_addrlen) < 0) {
-                    if (errno != EINPROGRESS) {
-                        LOG_DEBUG("Health probe attempt to %s:%d failed (%s), trying next address",
-                                  backend->ip, backend->port, strerror(errno));
-                        close(fd);
-                        fd = -1;
-                        continue;
-                    }
-                }
-                connected = 1;
-                break;
-            }
-
-            freeaddrinfo(res);
-
-            if (!connected) {
-                // Immediate hard refusal (e.g., Host Unreachable / Connection Refused)
+            int ret = net_connect_async(backend->ip, backend->port, &fd);
+            if (ret == -1) {
                 LOG_DEBUG("Health probe immediate failure to %s:%d. Will retry next tick.",
                           backend->ip, backend->port);
                 if (fd >= 0) close(fd);
                 continue; // Leave probe_fd == -1 so next timer tick tries again
-            } else if (errno == 0) {
+            } else if (ret == 0) {
                 // Immediate connection success (common on loopback / localhost)!
                 LOG_INFO("Health probe immediately verified! Restoring %s:%d to ALIVE status.",
                          backend->ip, backend->port);
@@ -188,6 +145,9 @@ void router_handle_probe_event(int epoll_fd, EndpointToken *token, uint32_t even
 
     BackendServer *backend = token->backend;
     int fd = token->fd;
+
+    // C2 FIX: Nullify token FD immediately to prevent use-after-free if epoll returns stale event
+    token->fd = -1;
 
     // 1. Instantly unregister the socket from epoll to prevent duplicate event notifications
     epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL);

@@ -2,6 +2,7 @@
 #define CONFIG_H
 
 #include <arpa/inet.h>
+#include <stdatomic.h>
 
 // Default limits (can be overridden in config file)
 #define MAX_ROUTES 10
@@ -11,6 +12,15 @@
 #define MAX_LINE_LEN 256
 #define MAX_CONSECUTIVE_FAILURES 1  // Hard connection refusals trigger immediate failover
 #define CONNECTION_IDLE_TIMEOUT_SECS 30  // Close connections idle for more than 30 seconds
+
+// M3: Rate limiting defaults
+#define DEFAULT_MAX_CONNECTIONS_PER_SEC 1000  // Global connection rate limit
+#define DEFAULT_MAX_CONNECTIONS_PER_IP_PER_SEC 50  // Per-IP connection rate limit
+
+// Absolute hard limits (compile-time) - config values cannot exceed these
+#define HARD_MAX_ROUTES MAX_ROUTES
+#define HARD_MAX_BACKENDS MAX_BACKENDS
+#define HARD_MAX_ACTIVE_CONNECTIONS 65536  // Practical limit for dynamic allocation
 
 // Represents a single destination backend server
 typedef struct {
@@ -27,9 +37,17 @@ typedef struct {
     int frontend_port;
     BackendServer backends[MAX_BACKENDS];
     int backend_count;
-    int current_backend_idx;  
+    _Atomic int current_backend_idx;  // Atomic for thread-safe round-robin (C11)
     int max_consecutive_failures;  // Per-route failure threshold (falls back to global)
 } Route;
+
+// M3: Simple token bucket for rate limiting
+typedef struct {
+    _Atomic int tokens;
+    int max_tokens;
+    int refill_rate_per_sec;
+    time_t last_refill;
+} TokenBucket;
 
 // The complete gateway configuration state
 typedef struct {
@@ -43,6 +61,10 @@ typedef struct {
     int io_buffer_size;
     int max_consecutive_failures;
     int connection_idle_timeout_secs;
+    
+    // M3: Rate limiting configuration
+    int max_connections_per_sec;
+    int max_connections_per_ip_per_sec;
 } GatewayConfig;
 
 int config_load(const char *filepath, GatewayConfig *config);

@@ -4,17 +4,23 @@
 #include <stdio.h>
 
 typedef enum {
-    LOG_INFO,
-    LOG_WARN,
-    LOG_ERROR,
-    LOG_DEBUG
+    LOG_ERROR = 0,
+    LOG_WARN  = 1,
+    LOG_INFO  = 2,
+    LOG_DEBUG = 3
 } LogLevel;
 
-void log_message(LogLevel level, const char *format, ...);
+// Global log level filter (runtime configurable)
+// Only messages at or above this level will be printed
+// Default: LOG_DEBUG (all messages)
+extern LogLevel g_log_level;
 
-#define LOG_INFO(...)  log_message(LOG_INFO, __VA_ARGS__)
-#define LOG_WARN(...)  log_message(LOG_WARN, __VA_ARGS__)
-#define LOG_ERROR(...) log_message(LOG_ERROR, __VA_ARGS__)
-#define LOG_DEBUG(...) log_message(LOG_DEBUG, __VA_ARGS__)
+void log_message(LogLevel level, const char *format, ...);
+void log_set_level(LogLevel level);
+
+#define LOG_INFO(...)  do { if (LOG_INFO <= g_log_level)  log_message(LOG_INFO, __VA_ARGS__); } while(0)
+#define LOG_WARN(...)  do { if (LOG_WARN <= g_log_level)  log_message(LOG_WARN, __VA_ARGS__); } while(0)
+#define LOG_ERROR(...) do { if (LOG_ERROR <= g_log_level) log_message(LOG_ERROR, __VA_ARGS__); } while(0)
+#define LOG_DEBUG(...) do { if (LOG_DEBUG <= g_log_level) log_message(LOG_DEBUG, __VA_ARGS__); } while(0)
 
 #endif // LOGGER_H

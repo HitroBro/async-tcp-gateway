@@ -32,6 +32,10 @@ Client → [Gateway:8080] → Backend Pool (127.0.0.1:9001, 127.0.0.1:9002, ...)
 | **Metrics/Observability** | SIGUSR1 dumps connection stats, byte counters, route/backend status |
 | **CLI Config** | `-c /path/to.conf` custom config, `-h` help |
 | **Zero-Copy Friendly** | `MSG_NOSIGNAL`, non-blocking I/O, deferred cleanup |
+| **Rate Limiting** | Token bucket per-IP and global connection rate limiting |
+| **TCP Optimizations** | `TCP_NODELAY` (disable Nagle), `SO_KEEPALIVE` with custom timing |
+| **Monotonic Clock** | `CLOCK_MONOTONIC` for idle timeout (NTP-safe) |
+| **Atomic Metrics** | Lock-free counters using C11 `_Atomic` for thread safety |
 
 ## Project Structure
 
@@ -116,7 +120,7 @@ python3 tests/mock_backend.py -p 9003 &  # Start after gateway
 Create a config file (e.g., `config/gateway.conf`):
 
 ```ini
-# Global settings (optional - all have sensible defaults)
+### Global settings (optional - all have sensible defaults)
 [global]
 max_routes = 10              # Maximum number of routes (compile-time max: 10)
 max_backends = 10            # Maximum backends per route (compile-time max: 10)
@@ -124,6 +128,8 @@ max_active_connections = 1024 # Maximum concurrent connections
 io_buffer_size = 8192        # I/O ring buffer size in bytes
 max_consecutive_failures = 1 # Failures before marking backend DOWN
 connection_idle_timeout_secs = 30 # Idle timeout in seconds
+max_connections_per_sec = 1000 # Global connection rate limit (tokens/sec)
+max_connections_per_ip_per_sec = 50 # Per-IP connection rate limit (tokens/sec)
 
 # Route 1: Listen on port 8080, balance across 2 backends
 [route]
@@ -194,10 +200,18 @@ Output includes:
 ## Performance Notes
 
 - **Ring buffer size**: 8KB (configurable via `io_buffer_size`)
-- **Max events per `epoll_wait`**: 64 (`MAX_EVENTS`)
-- **Max concurrent connections**: 1024 (configurable via `max_active_connections`)
+- **Max events per `epoll_wait`**: 256 (`MAX_EVENTS`, increased from 64)
+- **Max concurrent connections**: 1024 (configurable via `max_active_connections`, dynamic allocation up to 65536)
 - **Max routes/backends**: 10 each (configurable via `max_routes`, `max_backends`)
 - **Failure threshold**: 1 consecutive failure → immediate `DOWN` (configurable)
+- **Idle timeout resolution**: 1 second (using `CLOCK_MONOTONIC`)
+- **Rate limiting**: Token bucket algorithm (global + per-IP)
+
+## Limitations
+
+- **Layer 4 only**: This is a TCP proxy (Layer 4). It does not terminate TLS/SSL. For HTTPS, deploy a TLS terminator (e.g., nginx, HAProxy) in front, or use a Layer 7 proxy.
+- **Single-threaded**: The event loop runs on a single CPU core. For multi-core scaling, run multiple instances with `SO_REUSEPORT` (configurable).
+- **No HTTP/2 or WebSocket awareness**: Pure TCP stream proxy.
 
 ## License
 

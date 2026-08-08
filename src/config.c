@@ -38,6 +38,9 @@ int config_load(const char *filepath, GatewayConfig *config) {
     config->io_buffer_size = IO_BUFFER_SIZE;
     config->max_consecutive_failures = MAX_CONSECUTIVE_FAILURES;
     config->connection_idle_timeout_secs = CONNECTION_IDLE_TIMEOUT_SECS;
+    // M3: Rate limiting defaults
+    config->max_connections_per_sec = DEFAULT_MAX_CONNECTIONS_PER_SEC;
+    config->max_connections_per_ip_per_sec = DEFAULT_MAX_CONNECTIONS_PER_IP_PER_SEC;
 
     char line[MAX_LINE_LEN];
     Route *current_route = NULL;
@@ -113,6 +116,10 @@ int config_load(const char *filepath, GatewayConfig *config) {
                 config->max_consecutive_failures = atoi(val);
             } else if (strcmp(key, "connection_idle_timeout_secs") == 0) {
                 config->connection_idle_timeout_secs = atoi(val);
+            } else if (strcmp(key, "max_connections_per_sec") == 0) {
+                config->max_connections_per_sec = atoi(val);
+            } else if (strcmp(key, "max_connections_per_ip_per_sec") == 0) {
+                config->max_connections_per_ip_per_sec = atoi(val);
             } else {
                 LOG_WARN("Unknown global configuration key '%s' on line %d.", key, line_num);
             }
@@ -124,7 +131,13 @@ int config_load(const char *filepath, GatewayConfig *config) {
             }
 
             if (strcmp(key, "frontend_port") == 0) {
-                current_route->frontend_port = atoi(val);
+                int port = atoi(val);
+                // M6 FIX: Validate port range
+                if (port <= 0 || port > 65535) {
+                    LOG_ERROR("Invalid frontend_port %d on line %d (must be 1-65535)", port, line_num);
+                } else {
+                    current_route->frontend_port = port;
+                }
             } else if (strcmp(key, "backend") == 0) {
                 if (current_route->backend_count >= config->max_backends) {
                     LOG_WARN("Max backends (%d) reached for port %d.", config->max_backends, current_route->frontend_port);
@@ -154,6 +167,41 @@ int config_load(const char *filepath, GatewayConfig *config) {
 
     fclose(file);
 
+    // C4 FIX: Validate config limits against hard maximums and sensible minimums
+    if (config->max_active_connections <= 0) {
+        LOG_WARN("max_active_connections (%d) invalid, using default %d", config->max_active_connections, MAX_ACTIVE_CONNECTIONS);
+        config->max_active_connections = MAX_ACTIVE_CONNECTIONS;
+    } else if (config->max_active_connections > HARD_MAX_ACTIVE_CONNECTIONS) {
+        LOG_WARN("max_active_connections (%d) exceeds hard limit (%d), capping.", config->max_active_connections, HARD_MAX_ACTIVE_CONNECTIONS);
+        config->max_active_connections = HARD_MAX_ACTIVE_CONNECTIONS;
+    }
+
+    if (config->max_consecutive_failures <= 0) {
+        LOG_WARN("max_consecutive_failures (%d) invalid, using default %d", config->max_consecutive_failures, MAX_CONSECUTIVE_FAILURES);
+        config->max_consecutive_failures = MAX_CONSECUTIVE_FAILURES;
+    }
+
+    if (config->connection_idle_timeout_secs <= 0) {
+        LOG_WARN("connection_idle_timeout_secs (%d) invalid, using default %d", config->connection_idle_timeout_secs, CONNECTION_IDLE_TIMEOUT_SECS);
+        config->connection_idle_timeout_secs = CONNECTION_IDLE_TIMEOUT_SECS;
+    }
+
+    if (config->io_buffer_size <= 0) {
+        LOG_WARN("io_buffer_size (%d) invalid, using default %d", config->io_buffer_size, IO_BUFFER_SIZE);
+        config->io_buffer_size = IO_BUFFER_SIZE;
+    }
+
+    // M3: Validate rate limiting config
+    if (config->max_connections_per_sec <= 0) {
+        LOG_WARN("max_connections_per_sec (%d) invalid, using default %d", config->max_connections_per_sec, DEFAULT_MAX_CONNECTIONS_PER_SEC);
+        config->max_connections_per_sec = DEFAULT_MAX_CONNECTIONS_PER_SEC;
+    }
+
+    if (config->max_connections_per_ip_per_sec <= 0) {
+        LOG_WARN("max_connections_per_ip_per_sec (%d) invalid, using default %d", config->max_connections_per_ip_per_sec, DEFAULT_MAX_CONNECTIONS_PER_IP_PER_SEC);
+        config->max_connections_per_ip_per_sec = DEFAULT_MAX_CONNECTIONS_PER_IP_PER_SEC;
+    }
+
     if (config->route_count == 0) {
         LOG_ERROR("No valid routing rules found in %s.", filepath);
         return -1;
@@ -167,13 +215,15 @@ void config_print(const GatewayConfig *config) {
     LOG_INFO("=== Active Gateway Routing Table ===");
     for (int i = 0; i < config->route_count; i++) {
         const Route *route = &config->routes[i];
-        LOG_INFO("Route #%d: Listen on Port [%d] -> %d Backend(s) configured:", 
+        LOG_INFO("Route #%d: Listen on Port [%d] -> %d Backend(s) configured:",
                  i + 1, route->frontend_port, route->backend_count);
         for (int j = 0; j < route->backend_count; j++) {
             const BackendServer *bs = &route->backends[j];
-            LOG_INFO("   ├── Backend %d: %s:%d [Status: %s]", 
+            LOG_INFO("   ├── Backend %d: %s:%d [Status: %s]",
                      j + 1, bs->ip, bs->port, bs->is_alive ? "ALIVE" : "DOWN");
         }
     }
+    LOG_INFO("Rate limiting: %d conn/sec global, %d conn/sec per IP",
+             config->max_connections_per_sec, config->max_connections_per_ip_per_sec);
     LOG_INFO("====================================");
 }

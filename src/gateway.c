@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "gateway.h"
 #include "logger.h"
 #include <stdlib.h>
@@ -8,17 +10,60 @@
 #include <inttypes.h>
 
 #define MAX_DEFERRED_CLEANUP 64
-static ConnectionContext *deferred_cleanup_queue[MAX_DEFERRED_CLEANUP];
-static int deferred_count = 0;
 
-// Maximum active connections - using compile-time max for array size,
-// actual limit enforced via config->max_active_connections
-#define MAX_ACTIVE_CONNECTIONS 1024
-static ConnectionContext *active_connections[MAX_ACTIVE_CONNECTIONS];
+// C4 FIX: Dynamic array for active connections (allocated based on config)
+static ConnectionContext **active_connections = NULL;
 static int active_count = 0;
+static int active_capacity = 0;
+
+// H5 FIX: Dynamic deferred cleanup queue to handle burst teardown
+static ConnectionContext **deferred_cleanup_dynamic = NULL;
+static int deferred_count = 0;
+static int deferred_capacity = 0;
 
 // Global metrics
 GatewayMetrics g_metrics = {0};
+
+// Internal helper to ensure active_connections array has capacity
+static int ensure_active_capacity(int required) {
+    if (required <= active_capacity) return 0;
+    
+    int new_capacity = active_capacity ? active_capacity * 2 : 128;
+    while (new_capacity < required) new_capacity *= 2;
+    
+    ConnectionContext **new_array = realloc(active_connections, new_capacity * sizeof(ConnectionContext*));
+    if (!new_array) {
+        LOG_ERROR("Failed to reallocate active_connections array to %d entries", new_capacity);
+        return -1;
+    }
+    active_connections = new_array;
+    active_capacity = new_capacity;
+    return 0;
+}
+
+// H5: Internal helper to ensure deferred cleanup queue has capacity
+static int ensure_deferred_capacity(int required) {
+    if (required <= deferred_capacity) return 0;
+    
+    int new_capacity = deferred_capacity ? deferred_capacity * 2 : MAX_DEFERRED_CLEANUP;
+    while (new_capacity < required) new_capacity *= 2;
+    
+    ConnectionContext **new_array = realloc(deferred_cleanup_dynamic, new_capacity * sizeof(ConnectionContext*));
+    if (!new_array) {
+        LOG_ERROR("Failed to reallocate deferred cleanup queue to %d entries", new_capacity);
+        return -1;
+    }
+    deferred_cleanup_dynamic = new_array;
+    deferred_capacity = new_capacity;
+    return 0;
+}
+
+// H2: Get monotonic time in seconds
+static inline time_t get_monotonic_secs(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec;
+}
 
 ConnectionContext *conn_context_create(int client_fd, const Route *route, const GatewayConfig *config) {
     ConnectionContext *ctx = (ConnectionContext *)malloc(sizeof(ConnectionContext));
@@ -32,7 +77,7 @@ ConnectionContext *conn_context_create(int client_fd, const Route *route, const 
     ctx->backend_fd = -1;
     ctx->state = CONN_STATE_CONNECTING;
     ctx->route = route;
-    ctx->last_activity = time(NULL);  // Initialize last activity timestamp
+    ctx->last_activity = get_monotonic_secs();  // H2: Initialize with monotonic clock
 
     ctx->client_token.fd = client_fd;
     ctx->client_token.role = ROLE_CLIENT;
@@ -42,9 +87,22 @@ ConnectionContext *conn_context_create(int client_fd, const Route *route, const 
     ctx->backend_token.role = ROLE_BACKEND;
     ctx->backend_token.parent = ctx;
 
-    // Track active connection for idle timeout sweep
+    // C4 FIX: Use dynamic array with capacity check
+    if (ensure_active_capacity(active_count + 1) < 0) {
+        free(ctx);
+        return NULL;
+    }
     if (active_count < config->max_active_connections) {
         active_connections[active_count++] = ctx;
+        
+        // L7: Track active connections per backend
+        if (ctx->target_backend) {
+            ctx->target_backend->active_connections++;
+        }
+    } else {
+        // Should not happen if caller checks, but safety first
+        free(ctx);
+        return NULL;
     }
 
     // Update metrics
@@ -84,11 +142,17 @@ void conn_context_destroy(int epoll_fd, ConnectionContext *ctx) {
 
     g_metrics.active_connections--;
 
-    if (deferred_count < MAX_DEFERRED_CLEANUP) {
-        deferred_cleanup_queue[deferred_count++] = ctx;
-    } else {
-        LOG_WARN("Deferred cleanup queue full; executing fallback immediate free.");
+    // L7: Decrement active connections per backend
+    if (ctx->target_backend && ctx->target_backend->active_connections > 0) {
+        ctx->target_backend->active_connections--;
+    }
+
+    // H5: Use dynamic deferred cleanup queue
+    if (ensure_deferred_capacity(deferred_count + 1) < 0) {
+        LOG_WARN("Deferred cleanup queue reallocation failed; executing fallback immediate free.");
         free(ctx);
+    } else {
+        deferred_cleanup_dynamic[deferred_count++] = ctx;
     }
 }
 
@@ -98,17 +162,28 @@ void conn_context_destroy_all(int epoll_fd) {
         conn_context_destroy(epoll_fd, active_connections[active_count - 1]);
     }
     conn_context_sweep_cleanup();
+    
+    // C4 FIX: Free the dynamic array on complete shutdown
+    free(active_connections);
+    active_connections = NULL;
+    active_capacity = 0;
+    
+    // H5: Free dynamic deferred cleanup queue
+    free(deferred_cleanup_dynamic);
+    deferred_cleanup_dynamic = NULL;
+    deferred_capacity = 0;
 }
 
 void conn_context_sweep_cleanup(void) {
+    // H5: Use dynamic deferred cleanup queue
     for (int i = 0; i < deferred_count; i++) {
-        free(deferred_cleanup_queue[i]);
+        free(deferred_cleanup_dynamic[i]);
     }
     deferred_count = 0;
 }
 
 void conn_context_sweep_idle(int epoll_fd) {
-    time_t now = time(NULL);
+    time_t now = get_monotonic_secs();  // H2: Use monotonic clock
     for (int i = 0; i < active_count; ) {
         ConnectionContext *ctx = active_connections[i];
         if (ctx->state == CONN_STATE_ESTABLISHED) {
@@ -126,38 +201,36 @@ void conn_context_sweep_idle(int epoll_fd) {
 
 // Metrics functions
 void metrics_increment_connections(void) {
-    g_metrics.total_connections++;
-    g_metrics.active_connections++;
+    atomic_fetch_add(&g_metrics.total_connections, 1);
+    atomic_fetch_add(&g_metrics.active_connections, 1);
 }
 
 void metrics_decrement_connections(void) {
-    if (g_metrics.active_connections > 0) {
-        g_metrics.active_connections--;
-    }
+    atomic_fetch_sub(&g_metrics.active_connections, 1);
 }
 
 void metrics_increment_failed(void) {
-    g_metrics.failed_connections++;
+    atomic_fetch_add(&g_metrics.failed_connections, 1);
 }
 
 void metrics_add_bytes_read(uint64_t bytes) {
-    g_metrics.total_bytes_read += bytes;
+    atomic_fetch_add(&g_metrics.total_bytes_read, bytes);
 }
 
 void metrics_add_bytes_written(uint64_t bytes) {
-    g_metrics.total_bytes_written += bytes;
+    atomic_fetch_add(&g_metrics.total_bytes_written, bytes);
 }
 
 void metrics_increment_backend_failures(void) {
-    g_metrics.backend_failures++;
+    atomic_fetch_add(&g_metrics.backend_failures, 1);
 }
 
 void metrics_increment_health_probes(void) {
-    g_metrics.health_probes++;
+    atomic_fetch_add(&g_metrics.health_probes, 1);
 }
 
 void metrics_increment_health_probe_success(void) {
-    g_metrics.health_probe_successes++;
+    atomic_fetch_add(&g_metrics.health_probe_successes, 1);
 }
 
 void metrics_dump(const GatewayConfig *config) {

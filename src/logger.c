@@ -2,7 +2,18 @@
 #include <stdarg.h>
 #include <time.h>
 
+// Global log level filter (runtime configurable)
+// Default: LOG_DEBUG (all messages)
+LogLevel g_log_level = LOG_DEBUG;
+
+void log_set_level(LogLevel level) {
+    g_log_level = level;
+}
+
 void log_message(LogLevel level, const char *format, ...) {
+    // Skip if message level is below current filter
+    if (level > g_log_level) return;
+    
     time_t now;
     time(&now);
     struct tm *local = localtime(&now);

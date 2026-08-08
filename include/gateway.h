@@ -4,8 +4,9 @@
 #include "config.h"
 #include <sys/types.h>
 
-#define IO_BUFFER_SIZE 8192
-#define CONNECTION_IDLE_TIMEOUT_SECS 30  // Close connections idle for more than 30 seconds
+// Forward declare constants from config.h to avoid duplication
+// #define IO_BUFFER_SIZE 8192
+// #define CONNECTION_IDLE_TIMEOUT_SECS 30
 
 typedef enum {
     CONN_STATE_CONNECTING,  // Backend connection initiated, waiting for handshake
@@ -71,14 +72,14 @@ typedef struct ConnectionContext ConnectionContext; // Forward declaration
 
 // Global metrics counters
 typedef struct {
-    uint64_t total_connections;
-    uint64_t active_connections;
-    uint64_t failed_connections;
-    uint64_t total_bytes_read;
-    uint64_t total_bytes_written;
-    uint64_t backend_failures;
-    uint64_t health_probes;
-    uint64_t health_probe_successes;
+    _Atomic uint64_t total_connections;
+    _Atomic uint64_t active_connections;
+    _Atomic uint64_t failed_connections;
+    _Atomic uint64_t total_bytes_read;
+    _Atomic uint64_t total_bytes_written;
+    _Atomic uint64_t backend_failures;
+    _Atomic uint64_t health_probes;
+    _Atomic uint64_t health_probe_successes;
 } GatewayMetrics;
 
 extern GatewayMetrics g_metrics;
@@ -116,7 +117,7 @@ struct ConnectionContext {
     EndpointToken client_token;
     EndpointToken backend_token;
 
-    time_t last_activity;  // Timestamp of last read/write activity for idle timeout
+    time_t last_activity;  // Timestamp of last read/write activity for idle timeout (monotonic clock)
 };
 
 // Allocates and initializes a brand new connection context

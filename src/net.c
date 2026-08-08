@@ -13,9 +13,10 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/ip6.h>  // For IPV6_V6ONLY
+#include <netinet/tcp.h>  // For TCP_NODELAY, TCP_KEEPIDLE, etc.
 
-// Creates a dual-stack (IPv4/IPv6) listener socket
-int net_create_listener(int port) {
+// Creates a dual-stack (IPv4/IPv6) listener socket with optional SO_REUSEPORT
+int net_create_listener(int port, int reuse_port) {
     int server_fd;
     struct addrinfo hints, *res, *rp;
     char port_str[16];
@@ -49,6 +50,17 @@ int net_create_listener(int port) {
             return -1;
         }
 
+        // H1: Optional SO_REUSEPORT for multi-process scaling (Linux 3.9+)
+        if (reuse_port) {
+#ifdef SO_REUSEPORT
+            if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
+                LOG_WARN("Failed to set SO_REUSEPORT option (kernel may not support): %s", strerror(errno));
+            }
+#else
+            LOG_WARN("SO_REUSEPORT not available on this system");
+#endif
+        }
+
         // Enable dual-stack: allow IPv6 socket to accept IPv4 connections too
         if (rp->ai_family == AF_INET6) {
             int ipv6only = 0;
@@ -77,7 +89,7 @@ int net_create_listener(int port) {
         return -1;
     }
 
-    LOG_INFO("Gateway listener created successfully on port %d (FD: %d)", port, server_fd);
+    LOG_INFO("Gateway listener created successfully on port %d (FD: %d)%s", port, server_fd, reuse_port ? " [REUSEPORT]" : "");
     return server_fd;
 }
 
@@ -125,6 +137,72 @@ int net_connect_to_backend(const char *ip, int port) {
     return backend_fd;
 }
 
+// M2: Shared async connect logic used by both initiate_backend_connection and router_sweep_health_probes
+// Returns: 0 on success (fd in *out_fd, connection in progress or immediate),
+//         -1 on hard failure (all addresses failed),
+//         -2 on EINPROGRESS (connection in progress, fd in *out_fd)
+int net_connect_async(const char *ip, int port, int *out_fd) {
+    struct addrinfo hints, *res, *rp;
+    char port_str[16];
+    int fd = -1;
+    int connected = 0;
+
+    snprintf(port_str, sizeof(port_str), "%d", port);
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = 0;
+
+    int ret = getaddrinfo(ip, port_str, &hints, &res);
+    if (ret != 0) {
+        LOG_ERROR("getaddrinfo failed for %s:%d: %s", ip, port, gai_strerror(ret));
+        return -1;
+    }
+
+    for (rp = res; rp != NULL; rp = rp->ai_next) {
+        fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (fd < 0) {
+            LOG_DEBUG("Async connect socket creation failed for %s:%d: %s", ip, port, strerror(errno));
+            continue;
+        }
+
+        if (net_set_nonblocking(fd) < 0) {
+            close(fd);
+            fd = -1;
+            continue;
+        }
+
+        // Apply TCP_NODELAY and SO_KEEPALIVE (H3)
+        net_set_tcp_nodelay(fd, 1);
+        net_set_keepalive(fd, 30, 10, 3);
+
+        if (connect(fd, rp->ai_addr, rp->ai_addrlen) < 0) {
+            if (errno != EINPROGRESS) {
+                LOG_DEBUG("Async connect attempt to %s:%d failed (%s), trying next address", ip, port, strerror(errno));
+                close(fd);
+                fd = -1;
+                continue;
+            }
+        }
+        connected = 1;
+        break;
+    }
+
+    freeaddrinfo(res);
+
+    if (!connected) {
+        if (fd >= 0) close(fd);
+        return -1;
+    }
+
+    *out_fd = fd;
+    return (errno == EINPROGRESS || errno == 0) ? (errno == 0 ? 0 : -2) : -1;
+}
+
+// Guaranteed transmission loop. Ensures all 'len' bytes are sent,
+// protecting against partial writes and SIGPIPE crashes.
+// Returns 0 on complete success, or -1 if the connection dropped/failed.
 int net_send_all(int sockfd, const void *buffer, size_t len) {
     size_t total_sent = 0;
     const char *buf_ptr = (const char *)buffer;
@@ -168,6 +246,51 @@ int net_set_nonblocking(int sockfd) {
         LOG_ERROR("fcntl(F_SETFL, O_NONBLOCK) failed on FD %d: %s", sockfd, strerror(errno));
         return -1;
     }
+
+    return 0;
+}
+
+// H3: Configure TCP_NODELAY (disable Nagle's algorithm)
+int net_set_tcp_nodelay(int sockfd, int enable) {
+    int opt = enable ? 1 : 0;
+    if (setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt)) < 0) {
+        LOG_ERROR("Failed to set TCP_NODELAY=%d on FD %d: %s", enable, sockfd, strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
+// H3: Configure SO_KEEPALIVE with custom timing
+int net_set_keepalive(int sockfd, int idle_secs, int interval_secs, int max_probes) {
+    int opt = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt)) < 0) {
+        LOG_ERROR("Failed to set SO_KEEPALIVE on FD %d: %s", sockfd, strerror(errno));
+        return -1;
+    }
+
+#ifdef TCP_KEEPIDLE
+    if (idle_secs > 0) {
+        if (setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPIDLE, &idle_secs, sizeof(idle_secs)) < 0) {
+            LOG_WARN("Failed to set TCP_KEEPIDLE=%d on FD %d: %s", idle_secs, sockfd, strerror(errno));
+        }
+    }
+#endif
+
+#ifdef TCP_KEEPINTVL
+    if (interval_secs > 0) {
+        if (setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPINTVL, &interval_secs, sizeof(interval_secs)) < 0) {
+            LOG_WARN("Failed to set TCP_KEEPINTVL=%d on FD %d: %s", interval_secs, sockfd, strerror(errno));
+        }
+    }
+#endif
+
+#ifdef TCP_KEEPCNT
+    if (max_probes > 0) {
+        if (setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPCNT, &max_probes, sizeof(max_probes)) < 0) {
+            LOG_WARN("Failed to set TCP_KEEPCNT=%d on FD %d: %s", max_probes, sockfd, strerror(errno));
+        }
+    }
+#endif
 
     return 0;
 }

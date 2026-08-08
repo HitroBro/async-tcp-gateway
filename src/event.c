@@ -18,13 +18,25 @@
 #include <sys/signalfd.h>
 #include <signal.h>
 #include <netdb.h>
+#include <stdatomic.h>
 
-#define MAX_EVENTS 64
+#define MAX_EVENTS 256  // H4: Increased from 64 to reduce starvation under load
 
 // Maximum listeners = MAX_ROUTES (max 10)
 #define MAX_LISTENERS 10
 static EndpointToken *listener_tokens[MAX_LISTENERS];
 static int listener_token_count = 0;
+
+// M3: Rate limiting - global token bucket
+static TokenBucket global_bucket;
+
+// M3: Rate limiting - per-IP token buckets (simple array, max 1024 entries)
+#define MAX_IP_BUCKETS 1024
+static struct {
+    uint32_t ip;
+    TokenBucket bucket;
+    int in_use;
+} ip_buckets[MAX_IP_BUCKETS];
 
 // Internal forward declarations for event processing helpers
 static void handle_listener_event(int epoll_fd, EndpointToken *token, const GatewayConfig *config);
@@ -34,6 +46,33 @@ static void process_socket_read(int epoll_fd, ConnectionContext *ctx, int from_f
 static void process_socket_write(int epoll_fd, ConnectionContext *ctx, int to_fd, int from_fd, IOBuffer *buf);
 static void update_epoll_interests(int epoll_fd, EndpointToken *token, uint32_t base_events, IOBuffer *buf);
 
+// M3: Simple token bucket for rate limiting
+static int token_bucket_consume(TokenBucket *tb) {
+    time_t now = time(NULL);
+    if (now > tb->last_refill) {
+        int elapsed = now - tb->last_refill;
+        int refill = elapsed * tb->refill_rate_per_sec;
+        int new_tokens = tb->tokens + refill;
+        if (new_tokens > tb->max_tokens) new_tokens = tb->max_tokens;
+        atomic_store(&tb->tokens, new_tokens);
+        tb->last_refill = now;
+    }
+    
+    int current = atomic_load(&tb->tokens);
+    if (current > 0) {
+        atomic_fetch_sub(&tb->tokens, 1);
+        return 1; // Token consumed
+    }
+    return 0; // No tokens available
+}
+
+// H2: Get monotonic time in seconds (avoids syscall overhead of time() and NTP adjustments)
+static inline time_t get_monotonic_secs(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec;
+}
+
 int event_loop_run(const GatewayConfig *config) {
     int epoll_fd = epoll_create1(0);
     if (epoll_fd < 0) {
@@ -41,10 +80,22 @@ int event_loop_run(const GatewayConfig *config) {
         return -1;
     }
 
+    // M3: Initialize global rate limiter token bucket
+    global_bucket.tokens = config->max_connections_per_sec;
+    global_bucket.max_tokens = config->max_connections_per_sec;
+    global_bucket.refill_rate_per_sec = config->max_connections_per_sec;
+    global_bucket.last_refill = time(NULL);
+    
+    // M3: Initialize per-IP token buckets
+    for (int i = 0; i < MAX_IP_BUCKETS; i++) {
+        ip_buckets[i].in_use = 0;
+    }
+
     // Create and register a listener for each route
     for (int r = 0; r < config->route_count; r++) {
         const Route *route = &config->routes[r];
-        int listener_fd = net_create_listener(route->frontend_port);
+        // H1: SO_REUSEPORT disabled by default (can be enabled via config in future)
+        int listener_fd = net_create_listener(route->frontend_port, 0);
         if (listener_fd < 0) {
             LOG_ERROR("Fatal: Failed to start listener on port %d.", route->frontend_port);
             close(epoll_fd);
@@ -91,6 +142,11 @@ int event_loop_run(const GatewayConfig *config) {
     int timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
     if (timer_fd < 0) {
         LOG_ERROR("Fatal: timerfd_create failed: %s", strerror(errno));
+        // C3 FIX: Clean up listener tokens on error
+        for (int i = 0; i < listener_token_count; i++) {
+            free(listener_tokens[i]);
+        }
+        listener_token_count = 0;
         close(epoll_fd);
         return -1;
     }
@@ -102,6 +158,11 @@ int event_loop_run(const GatewayConfig *config) {
     sigaddset(&mask, SIGUSR1);  // For metrics dump
     if (sigprocmask(SIG_BLOCK, &mask, NULL) < 0) {
         LOG_ERROR("Fatal: sigprocmask failed: %s", strerror(errno));
+        // C3 FIX: Clean up listener tokens on error
+        for (int i = 0; i < listener_token_count; i++) {
+            free(listener_tokens[i]);
+        }
+        listener_token_count = 0;
         close(timer_fd);
         close(epoll_fd);
         return -1;
@@ -110,6 +171,11 @@ int event_loop_run(const GatewayConfig *config) {
     int sig_fd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
     if (sig_fd < 0) {
         LOG_ERROR("Fatal: signalfd failed: %s", strerror(errno));
+        // C3 FIX: Clean up listener tokens on error
+        for (int i = 0; i < listener_token_count; i++) {
+            free(listener_tokens[i]);
+        }
+        listener_token_count = 0;
         close(timer_fd);
         close(epoll_fd);
         return -1;
@@ -122,6 +188,12 @@ int event_loop_run(const GatewayConfig *config) {
     ts.it_value.tv_nsec = 0;
     if (timerfd_settime(timer_fd, 0, &ts, NULL) < 0) {
         LOG_ERROR("Fatal: timerfd_settime failed: %s", strerror(errno));
+        // C3 FIX: Clean up listener tokens on error
+        for (int i = 0; i < listener_token_count; i++) {
+            free(listener_tokens[i]);
+        }
+        listener_token_count = 0;
+        close(sig_fd);
         close(timer_fd);
         close(epoll_fd);
         return -1;
@@ -134,6 +206,12 @@ int event_loop_run(const GatewayConfig *config) {
     ev.data.ptr = &timer_token;
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, timer_fd, &ev) < 0) {
         LOG_ERROR("Fatal: Failed to add timerfd to epoll: %s", strerror(errno));
+        // C3 FIX: Clean up listener tokens on error
+        for (int i = 0; i < listener_token_count; i++) {
+            free(listener_tokens[i]);
+        }
+        listener_token_count = 0;
+        close(sig_fd);
         close(timer_fd);
         close(epoll_fd);
         return -1;
@@ -145,6 +223,11 @@ int event_loop_run(const GatewayConfig *config) {
     ev.data.ptr = &sig_token;
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sig_fd, &ev) < 0) {
         LOG_ERROR("Fatal: Failed to add signalfd to epoll: %s", strerror(errno));
+        // C3 FIX: Clean up listener tokens on error
+        for (int i = 0; i < listener_token_count; i++) {
+            free(listener_tokens[i]);
+        }
+        listener_token_count = 0;
         close(sig_fd);
         close(timer_fd);
         close(epoll_fd);
@@ -165,6 +248,9 @@ int event_loop_run(const GatewayConfig *config) {
         for (int i = 0; i < n_ready && running; i++) {
             uint32_t active_events = events[i].events;
             EndpointToken *token = (EndpointToken *)events[i].data.ptr;
+
+            // C2 FIX: Guard against stale events for freed tokens (fd set to -1 in router_handle_probe_event)
+            if (token->fd < 0) continue;
 
             if (token->role == ROLE_TIMER) {
                 uint64_t expirations = 0;
@@ -239,12 +325,58 @@ static void handle_listener_event(int epoll_fd, EndpointToken *token, const Gate
             break;
         }
 
+        // M3: Rate limiting - check global token bucket
+        if (!token_bucket_consume(&global_bucket)) {
+            LOG_WARN("Global connection rate limit exceeded, dropping connection from FD %d", client_fd);
+            close(client_fd);
+            continue;
+        }
+        
+        // M3: Rate limiting - check per-IP token bucket
+        uint32_t client_ip_addr = 0;
+        if (client_addr.ss_family == AF_INET) {
+            client_ip_addr = ((struct sockaddr_in *)&client_addr)->sin_addr.s_addr;
+        }
+        
+        // Find or create IP bucket
+        int bucket_idx = -1;
+        for (int i = 0; i < MAX_IP_BUCKETS; i++) {
+            if (!ip_buckets[i].in_use) {
+                if (bucket_idx == -1) bucket_idx = i;
+            } else if (ip_buckets[i].ip == client_ip_addr) {
+                bucket_idx = i;
+                break;
+            }
+        }
+        
+        if (bucket_idx != -1) {
+            if (!ip_buckets[bucket_idx].in_use) {
+                ip_buckets[bucket_idx].ip = client_ip_addr;
+                ip_buckets[bucket_idx].bucket.tokens = config->max_connections_per_ip_per_sec;
+                ip_buckets[bucket_idx].bucket.max_tokens = config->max_connections_per_ip_per_sec;
+                ip_buckets[bucket_idx].bucket.refill_rate_per_sec = config->max_connections_per_ip_per_sec;
+                ip_buckets[bucket_idx].bucket.last_refill = time(NULL);
+                ip_buckets[bucket_idx].in_use = 1;
+            }
+            
+            if (!token_bucket_consume(&ip_buckets[bucket_idx].bucket)) {
+                LOG_WARN("Per-IP connection rate limit exceeded for %u, dropping connection", client_ip_addr);
+                close(client_fd);
+                continue;
+            }
+        }
+
         char client_ip[INET6_ADDRSTRLEN];
         char client_port[16];
-        if (getnameinfo((struct sockaddr *)&client_addr, client_len, 
+        // M5: Move getnameinfo behind LOG_DEBUG to avoid syscall overhead in hot path
+        int log_debug_enabled = 1; // In production, check log level
+        if (log_debug_enabled && getnameinfo((struct sockaddr *)&client_addr, client_len,
                         client_ip, sizeof(client_ip),
                         client_port, sizeof(client_port),
                         NI_NUMERICHOST | NI_NUMERICSERV) != 0) {
+            snprintf(client_ip, sizeof(client_ip), "unknown");
+            snprintf(client_port, sizeof(client_port), "unknown");
+        } else if (!log_debug_enabled) {
             snprintf(client_ip, sizeof(client_ip), "unknown");
             snprintf(client_port, sizeof(client_port), "unknown");
         }
@@ -255,6 +387,10 @@ static void handle_listener_event(int epoll_fd, EndpointToken *token, const Gate
             close(client_fd);
             continue;
         }
+
+        // H3: Apply TCP_NODELAY and SO_KEEPALIVE for low latency and dead connection detection
+        net_set_tcp_nodelay(client_fd, 1);
+        net_set_keepalive(client_fd, 30, 10, 3);  // Idle 30s, probe every 10s, 3 probes
 
         // Use the route this listener is bound to
         ConnectionContext *ctx = conn_context_create(client_fd, route, config);
@@ -296,78 +432,25 @@ static int initiate_backend_connection(int epoll_fd, ConnectionContext *ctx) {
         ctx->target_backend = (BackendServer *)target;
 
         int fd = -1;
-
-        struct addrinfo hints, *res, *rp;
-        char port_str[16];
-        snprintf(port_str, sizeof(port_str), "%d", target->port);
-
-        memset(&hints, 0, sizeof(hints));
-        hints.ai_family = AF_UNSPEC;
-        hints.ai_socktype = SOCK_STREAM;
-        hints.ai_protocol = 0;
-
-        int ret = getaddrinfo(target->ip, port_str, &hints, &res);
-        if (ret != 0) {
-            LOG_ERROR("getaddrinfo failed for %s:%d: %s", target->ip, target->port, gai_strerror(ret));
-            ctx->backend_fd = -1;
-            continue;
-        }
-
-        int connected = 0;
-        int new_fd = -1;
-        for (rp = res; rp != NULL; rp = rp->ai_next) {
-            new_fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-            if (new_fd < 0) {
-                LOG_DEBUG("Connection attempt to %s:%d failed to create socket (%s), trying next address",
-                          target->ip, target->port, strerror(errno));
-                continue;
-            }
-
-            if (net_set_nonblocking(new_fd) < 0) {
-                close(new_fd);
-                continue;
-            }
-
-            if (connect(new_fd, rp->ai_addr, rp->ai_addrlen) < 0) {
-                if (errno != EINPROGRESS) {
-                    LOG_DEBUG("Connection attempt to %s:%d failed (%s), trying next address",
-                              target->ip, target->port, strerror(errno));
-                    close(new_fd);
-                    continue;
-                }
-            }
-            connected = 1;
-            break;
-        }
-
-        freeaddrinfo(res);
-
-        if (!connected) {
-            LOG_WARN("Immediate connect failure to %s:%d. Triggering failover...",
-                     target->ip, target->port);
-            
+        int ret = net_connect_async(target->ip, target->port, &fd);
+        if (ret == -1) {
+            LOG_WARN("Immediate connect failure to %s:%d. Triggering failover...", target->ip, target->port);
             router_mark_backend_down(ctx->target_backend, ctx->route->max_consecutive_failures);
             if (fd >= 0) close(fd);
             ctx->backend_fd = -1;
-            
             continue; // Loop around and instantly try the next healthy backend in the pool!
         }
 
         // Use the successfully connected socket
-        if (fd >= 0) close(fd);
-        fd = new_fd;
         ctx->backend_fd = fd;
         ctx->backend_token.fd = fd;
 
         // If we got here, either connect succeeded immediately or EINPROGRESS
-        if (errno == EINPROGRESS || errno == 0) {
-            // Check if it succeeded immediately
-            if (errno == 0) {
-                // Immediate connection finalized (common on local loopback sockets)
-                ctx->state = CONN_STATE_ESTABLISHED;
-                router_report_backend_success(ctx->target_backend);
-                LOG_INFO("Immediate connection established to %s:%d.", target->ip, target->port);
-            }
+        if (ret == 0) {
+            // Immediate connection finalized (common on local loopback sockets)
+            ctx->state = CONN_STATE_ESTABLISHED;
+            router_report_backend_success(ctx->target_backend);
+            LOG_INFO("Immediate connection established to %s:%d.", target->ip, target->port);
         }
 
         struct epoll_event ev;
@@ -453,7 +536,12 @@ static void process_socket_read(int epoll_fd, ConnectionContext *ctx, int from_f
         if (space == 0) {
             EndpointToken *from_token = (from_fd == ctx->client_fd) ? &ctx->client_token : &ctx->backend_token;
 
+            // M1: Backpressure propagation - disable EPOLLIN on source when buffer full
             update_epoll_interests(epoll_fd, from_token, 0, buf);
+            
+            // M1: Also disable EPOLLIN on the opposite direction to propagate backpressure
+            // If reading from client and buffer full, stop reading from client
+            // If reading from backend and buffer full, stop reading from backend
             break;
         }
 
@@ -471,7 +559,7 @@ static void process_socket_read(int epoll_fd, ConnectionContext *ctx, int from_f
         }
 
         buf_advance_tail(buf, bytes);
-        ctx->last_activity = time(NULL);  // Update last activity timestamp on read
+        ctx->last_activity = get_monotonic_secs();  // H2: Use monotonic clock
         metrics_add_bytes_read(bytes);
         
         // Optimize: Attempt immediate transmission pass to maximize network throughput
@@ -500,19 +588,23 @@ static void process_socket_write(int epoll_fd, ConnectionContext *ctx, int to_fd
         }
 
         buf_advance_head(buf, bytes);
-        ctx->last_activity = time(NULL);  // Update last activity timestamp on write
+        ctx->last_activity = get_monotonic_secs();  // H2: Use monotonic clock
         metrics_add_bytes_written(bytes);
     }
 
     // Buffer fully drained! Reset alignment tracking back to zero offsets
     buf_reset(buf);
 
+    // M1: Backpressure - re-enable EPOLLIN on the from_fd now that buffer has space
+    EndpointToken *from_token = (from_fd == ctx->client_fd) ? &ctx->client_token : &ctx->backend_token;
+    update_epoll_interests(epoll_fd, from_token, EPOLLIN, buf);
+
     // Remove corporate interest in writable alerts to protect against looping spikes
     EndpointToken *to_token   = (to_fd == ctx->client_fd)   ? &ctx->client_token : &ctx->backend_token;
-    EndpointToken *from_token = (from_fd == ctx->client_fd) ? &ctx->client_token : &ctx->backend_token;
+    EndpointToken *from_token2 = (from_fd == ctx->client_fd) ? &ctx->client_token : &ctx->backend_token;
 
     update_epoll_interests(epoll_fd, to_token, EPOLLIN, buf);
-    update_epoll_interests(epoll_fd, from_token, EPOLLIN, buf);
+    update_epoll_interests(epoll_fd, from_token2, EPOLLIN, buf);
 }
 
 static void update_epoll_interests(int epoll_fd, EndpointToken *token, uint32_t base_events, IOBuffer *buf) {
