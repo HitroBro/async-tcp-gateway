@@ -1,13 +1,40 @@
-# Compiled Binaries and Object Files
+# Build artifacts
 bin/
 *.o
 *.out
 *.exe
 
-# System and Editor Artifacts
-.DS_Store
-*.swp
-*~
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg-info
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.venv/
+venv/
+env/
+ENV/
+
+# IDE/Editor
 .vscode/
 .idea/
-test.conf
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Distribution
+dist/
+build/
+*.egg-info/
+*.whl
+
+# Logs
+*.log
