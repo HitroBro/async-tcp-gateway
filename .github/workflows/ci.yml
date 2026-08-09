@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc make python3
+
+      - name: Build
+        run: make clean && make
+        working-directory: .
+
+      - name: Verify Binary
+        run: |
+          ./bin/gateway -h
+          test -f bin/gateway
+          test -x bin/gateway
+
+      - name: Run Tests
+        run: |
+          # Start mock backends
+          python3 tests/mock_backend.py -p 9001 &
+          python3 tests/mock_backend.py -p 9002 &
+          python3 tests/mock_backend.py -p 9003 &
+          python3 tests/mock_backend.py -p 9004 &
+          python3 tests/mock_backend.py -p 9005 &
+          sleep 2
+
+          # Start gateway
+          ./bin/gateway &
+          GATEWAY_PID=$!
+          sleep 2
+
+          # Run test client
+          python3 tests/test_client.py -p 8080 -m "Hello Gateway!"
+
+          # Cleanup
+          kill $GATEWAY_PID
+          pkill -f "mock_backend.py"
+        working-directory: .
+
+      - name: Code Quality
+        run: |
+          # Check for warnings
+          make 2>&1 | grep -E "(warning|error)" && exit 1 || true
+        working-directory: .
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run cppcheck
+        run: |
+          sudo apt-get update && sudo apt-get install -y cppcheck
+          cppcheck --enable=all --std=c11 --suppress=missingIncludeSystem src/ include/
+        working-directory: .
+
+      - name: Run clang-tidy (if available)
+        run: |
+          sudo apt-get update && sudo apt-get install -y clang-tidy
+          clang-tidy src/*.c -- -Iinclude -std=c11 2>&1 | head -50 || true
+        working-directory: .

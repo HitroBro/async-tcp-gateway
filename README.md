@@ -2,7 +2,7 @@
 
 [![C](https://img.shields.io/badge/C-C11-blue?style=for-the-badge&logo=c&logoColor=white)](https://en.wikipedia.org/wiki/C11_(C_standard_revision))
 [![Linux](https://img.shields.io/badge/Linux-epoll%20%7C%20timerfd%20%7C%20signalfd-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://man7.org/linux/man-pages/man7/epoll.7.html)
-[![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)](Makefile)
+[![CI](https://github.com/HitroBro/async-tcp-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/HitroBro/async-tcp-gateway/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-Python%20suite-orange?style=for-the-badge&logo=python)](tests/)
 
