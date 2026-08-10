@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <errno.h>
 
 // Internal helper: Strips leading and trailing whitespace/newlines from a string
 static char *trim_whitespace(char *str) {
@@ -19,6 +20,23 @@ static char *trim_whitespace(char *str) {
     // Write new null terminator
     end[1] = '\0';
     return str;
+}
+
+// Internal helper: Safe integer parsing with strtol
+// Returns 0 on success, -1 on error. Sets *out_val on success.
+static int parse_int(const char *str, int *out_val, int min_val, int max_val) {
+    char *endptr;
+    errno = 0;
+    long val = strtol(str, &endptr, 10);
+    
+    if (errno != 0 || endptr == str || *endptr != '\0') {
+        return -1; // Not a valid integer
+    }
+    if (val < min_val || val > max_val) {
+        return -1; // Out of range
+    }
+    *out_val = (int)val;
+    return 0;
 }
 
 int config_load(const char *filepath, GatewayConfig *config) {
@@ -97,32 +115,46 @@ int config_load(const char *filepath, GatewayConfig *config) {
         if (in_global_section) {
             // Global configuration options
             if (strcmp(key, "max_routes") == 0) {
-                config->max_routes = atoi(val);
-                if (config->max_routes > MAX_ROUTES) {
-                    LOG_WARN("max_routes (%d) exceeds compile-time maximum (%d), capping.", config->max_routes, MAX_ROUTES);
-                    config->max_routes = MAX_ROUTES;
-                }
-            } else if (strcmp(key, "max_backends") == 0) {
-                config->max_backends = atoi(val);
-                if (config->max_backends > MAX_BACKENDS) {
-                    LOG_WARN("max_backends (%d) exceeds compile-time maximum (%d), capping.", config->max_backends, MAX_BACKENDS);
-                    config->max_backends = MAX_BACKENDS;
-                }
-            } else if (strcmp(key, "max_active_connections") == 0) {
-                config->max_active_connections = atoi(val);
-            } else if (strcmp(key, "io_buffer_size") == 0) {
-                config->io_buffer_size = atoi(val);
-            } else if (strcmp(key, "max_consecutive_failures") == 0) {
-                config->max_consecutive_failures = atoi(val);
-            } else if (strcmp(key, "connection_idle_timeout_secs") == 0) {
-                config->connection_idle_timeout_secs = atoi(val);
-            } else if (strcmp(key, "max_connections_per_sec") == 0) {
-                config->max_connections_per_sec = atoi(val);
-            } else if (strcmp(key, "max_connections_per_ip_per_sec") == 0) {
-                config->max_connections_per_ip_per_sec = atoi(val);
-            } else {
-                LOG_WARN("Unknown global configuration key '%s' on line %d.", key, line_num);
-            }
+                        if (parse_int(val, &config->max_routes, 1, MAX_ROUTES) != 0) {
+                            LOG_WARN("Invalid max_routes value '%s' on line %d. Using default %d.", val, line_num, MAX_ROUTES);
+                        } else if (config->max_routes > MAX_ROUTES) {
+                            LOG_WARN("max_routes (%d) exceeds compile-time maximum (%d), capping.", config->max_routes, MAX_ROUTES);
+                            config->max_routes = MAX_ROUTES;
+                        }
+                    } else if (strcmp(key, "max_backends") == 0) {
+                        if (parse_int(val, &config->max_backends, 1, MAX_BACKENDS) != 0) {
+                            LOG_WARN("Invalid max_backends value '%s' on line %d. Using default %d.", val, line_num, MAX_BACKENDS);
+                        } else if (config->max_backends > MAX_BACKENDS) {
+                            LOG_WARN("max_backends (%d) exceeds compile-time maximum (%d), capping.", config->max_backends, MAX_BACKENDS);
+                            config->max_backends = MAX_BACKENDS;
+                        }
+                    } else if (strcmp(key, "max_active_connections") == 0) {
+                        if (parse_int(val, &config->max_active_connections, 1, HARD_MAX_ACTIVE_CONNECTIONS) != 0) {
+                            LOG_WARN("Invalid max_active_connections value '%s' on line %d. Using default %d.", val, line_num, MAX_ACTIVE_CONNECTIONS);
+                        }
+                    } else if (strcmp(key, "io_buffer_size") == 0) {
+                        if (parse_int(val, &config->io_buffer_size, 1024, 1048576) != 0) {
+                            LOG_WARN("Invalid io_buffer_size value '%s' on line %d. Using default %d.", val, line_num, IO_BUFFER_SIZE);
+                        }
+                    } else if (strcmp(key, "max_consecutive_failures") == 0) {
+                        if (parse_int(val, &config->max_consecutive_failures, 1, 100) != 0) {
+                            LOG_WARN("Invalid max_consecutive_failures value '%s' on line %d. Using default %d.", val, line_num, MAX_CONSECUTIVE_FAILURES);
+                        }
+                    } else if (strcmp(key, "connection_idle_timeout_secs") == 0) {
+                        if (parse_int(val, &config->connection_idle_timeout_secs, 1, 86400) != 0) {
+                            LOG_WARN("Invalid connection_idle_timeout_secs value '%s' on line %d. Using default %d.", val, line_num, CONNECTION_IDLE_TIMEOUT_SECS);
+                        }
+                    } else if (strcmp(key, "max_connections_per_sec") == 0) {
+                        if (parse_int(val, &config->max_connections_per_sec, 1, 100000) != 0) {
+                            LOG_WARN("Invalid max_connections_per_sec value '%s' on line %d. Using default %d.", val, line_num, DEFAULT_MAX_CONNECTIONS_PER_SEC);
+                        }
+                    } else if (strcmp(key, "max_connections_per_ip_per_sec") == 0) {
+                        if (parse_int(val, &config->max_connections_per_ip_per_sec, 1, 10000) != 0) {
+                            LOG_WARN("Invalid max_connections_per_ip_per_sec value '%s' on line %d. Using default %d.", val, line_num, DEFAULT_MAX_CONNECTIONS_PER_IP_PER_SEC);
+                        }
+                    } else {
+                        LOG_WARN("Unknown global configuration key '%s' on line %d.", key, line_num);
+                    }
         } else {
             // Route-specific configuration
             if (!current_route) {
@@ -131,10 +163,9 @@ int config_load(const char *filepath, GatewayConfig *config) {
             }
 
             if (strcmp(key, "frontend_port") == 0) {
-                int port = atoi(val);
-                // M6 FIX: Validate port range
-                if (port <= 0 || port > 65535) {
-                    LOG_ERROR("Invalid frontend_port %d on line %d (must be 1-65535)", port, line_num);
+                int port;
+                if (parse_int(val, &port, 1, 65535) != 0) {
+                    LOG_ERROR("Invalid frontend_port '%s' on line %d (must be 1-65535)", val, line_num);
                 } else {
                     current_route->frontend_port = port;
                 }
@@ -149,16 +180,23 @@ int config_load(const char *filepath, GatewayConfig *config) {
                 // Parse IP:PORT safely using width specifier %15[^:] to prevent buffer overflows!
                 int parsed = sscanf(val, "%15[^:]:%d", backend->ip, &backend->port);
                 if (parsed == 2) {
-                    backend->is_alive = 1;
-                    backend->active_connections = 0;
-                    backend->consecutive_failures = 0;
-                    backend->probe_fd = -1; // -1 indicates NO active health check socket
-                    current_route->backend_count++;
+                    // Validate port range
+                    if (backend->port <= 0 || backend->port > 65535) {
+                        LOG_ERROR("Invalid backend port %d on line %d (must be 1-65535)", backend->port, line_num);
+                    } else {
+                        backend->is_alive = 1;
+                        backend->active_connections = 0;
+                        backend->consecutive_failures = 0;
+                        backend->probe_fd = -1; // -1 indicates NO active health check socket
+                        current_route->backend_count++;
+                    }
                 } else {
                     LOG_ERROR("Malformed backend target on line %d: %s (Expected format IP:PORT)", line_num, val);
                 }
             } else if (strcmp(key, "max_consecutive_failures") == 0) {
-                current_route->max_consecutive_failures = atoi(val);
+                if (parse_int(val, &current_route->max_consecutive_failures, 1, 100) != 0) {
+                    LOG_WARN("Invalid max_consecutive_failures value '%s' on line %d. Using default %d.", val, line_num, MAX_CONSECUTIVE_FAILURES);
+                }
             } else {
                 LOG_WARN("Unknown configuration key '%s' on line %d.", key, line_num);
             }
