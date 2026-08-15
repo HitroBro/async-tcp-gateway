@@ -52,16 +52,17 @@ static inline char *buf_write_ptr(IOBuffer *buf) {
 }
 
 static inline size_t buf_contiguous_read(const IOBuffer *buf) {
+    if (!buf || !buf->data || buf->capacity == 0) return 0;
     if (buf->tail >= buf->head) {
         return buf->tail - buf->head;
     }
-    return IO_BUFFER_SIZE - buf->head;
+    return buf->capacity - buf->head;
 }
 
 static inline size_t buf_contiguous_write(const IOBuffer *buf) {
-    if (!buf) return 0;
+    if (!buf || !buf->data || buf->capacity == 0) return 0;
     if (buf->tail >= buf->head) {
-        size_t avail = IO_BUFFER_SIZE - buf->tail;
+        size_t avail = buf->capacity - buf->tail;
         if (buf->head == 0) {
             return (avail > 0) ? (avail - 1) : 0;
         }
