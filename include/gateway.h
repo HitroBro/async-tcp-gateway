@@ -34,11 +34,13 @@ static inline size_t buf_available_space(const IOBuffer *buf) {
 }
 
 static inline void buf_advance_head(IOBuffer *buf, size_t len) {
-    buf->head = (buf->head + len) % IO_BUFFER_SIZE;
+    if (!buf || buf->capacity == 0) return;
+    buf->head = (buf->head + len) % buf->capacity;
 }
 
 static inline void buf_advance_tail(IOBuffer *buf, size_t len) {
-    buf->tail = (buf->tail + len) % IO_BUFFER_SIZE;
+    if (!buf || buf->capacity == 0) return;
+    buf->tail = (buf->tail + len) % buf->capacity;
 }
 
 static inline const char *buf_read_ptr(const IOBuffer *buf) {
