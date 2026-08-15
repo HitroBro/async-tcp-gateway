@@ -3,6 +3,7 @@
 
 #include "config.h"
 #include <sys/types.h>
+#include <stdlib.h>
 
 // Forward declare constants from config.h to avoid duplication
 // #define IO_BUFFER_SIZE 8192
@@ -61,6 +62,20 @@ static inline size_t buf_contiguous_write(IOBuffer *buf) {
         return IO_BUFFER_SIZE - buf->tail;
     }
     return buf->head - buf->tail - 1;
+}
+
+static inline int buf_init(IOBuffer *buf, size_t capacity) {
+    if (!buf) return -1;
+    buf->head = 0;
+    buf->tail = 0;
+    (void)capacity;
+    return 0;
+}
+
+static inline void buf_free(IOBuffer *buf) {
+    if (!buf) return;
+    buf->head = 0;
+    buf->tail = 0;
 }
 
 static inline void buf_reset(IOBuffer *buf) {
