@@ -24,15 +24,13 @@ typedef struct {
 } IOBuffer;
 
 static inline size_t buf_available_data(const IOBuffer *buf) {
-    return (buf->tail >= buf->head) ? (buf->tail - buf->head) : (IO_BUFFER_SIZE - buf->head + buf->tail);
+    if (!buf || !buf->data || buf->capacity == 0) return 0;
+    return (buf->tail >= buf->head) ? (buf->tail - buf->head) : (buf->capacity - buf->head + buf->tail);
 }
 
 static inline size_t buf_available_space(const IOBuffer *buf) {
-    if (buf->tail >= buf->head) {
-        return IO_BUFFER_SIZE - buf->tail + buf->head - (buf->head == 0 ? 1 : 0);
-    } else {
-        return buf->head - buf->tail - 1;
-    }
+    if (!buf || !buf->data || buf->capacity <= 1) return 0;
+    return (buf->capacity - 1) - buf_available_data(buf);
 }
 
 static inline void buf_advance_head(IOBuffer *buf, size_t len) {
