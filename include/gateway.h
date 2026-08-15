@@ -17,7 +17,8 @@ typedef enum {
 
 // Simple ring buffer structure to manage partial network reads/writes
 typedef struct {
-    char data[IO_BUFFER_SIZE];
+    char *data;
+    size_t capacity;
     size_t head; // Read offset pointer
     size_t tail; // Write offset pointer
 } IOBuffer;
@@ -71,16 +72,29 @@ static inline size_t buf_contiguous_write(const IOBuffer *buf) {
 
 static inline int buf_init(IOBuffer *buf, size_t capacity) {
     if (!buf) return -1;
+    buf->data = (char *)malloc(capacity);
+    if (!buf->data) {
+        buf->capacity = 0;
+        buf->head = 0;
+        buf->tail = 0;
+        return -1;
+    }
+    buf->capacity = capacity;
     buf->head = 0;
     buf->tail = 0;
-    (void)capacity;
     return 0;
 }
 
 static inline void buf_free(IOBuffer *buf) {
-    if (!buf) return;
-    buf->head = 0;
-    buf->tail = 0;
+    if (buf) {
+        if (buf->data) {
+            free(buf->data);
+            buf->data = NULL;
+        }
+        buf->capacity = 0;
+        buf->head = 0;
+        buf->tail = 0;
+    }
 }
 
 static inline void buf_reset(IOBuffer *buf) {

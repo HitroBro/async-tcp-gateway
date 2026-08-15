@@ -79,6 +79,16 @@ ConnectionContext *conn_context_create(int client_fd, const Route *route, const 
     ctx->route = route;
     ctx->last_activity = get_monotonic_secs();  // H2: Initialize with monotonic clock
 
+    if (buf_init(&ctx->client_to_backend, IO_BUFFER_SIZE) < 0) {
+        free(ctx);
+        return NULL;
+    }
+    if (buf_init(&ctx->backend_to_client, IO_BUFFER_SIZE) < 0) {
+        buf_free(&ctx->client_to_backend);
+        free(ctx);
+        return NULL;
+    }
+
     ctx->client_token.fd = client_fd;
     ctx->client_token.role = ROLE_CLIENT;
     ctx->client_token.parent = ctx;
@@ -150,6 +160,8 @@ void conn_context_destroy(int epoll_fd, ConnectionContext *ctx) {
     // H5: Use dynamic deferred cleanup queue
     if (ensure_deferred_capacity(deferred_count + 1) < 0) {
         LOG_WARN("Deferred cleanup queue reallocation failed; executing fallback immediate free.");
+        buf_free(&ctx->client_to_backend);
+        buf_free(&ctx->backend_to_client);
         free(ctx);
     } else {
         deferred_cleanup_dynamic[deferred_count++] = ctx;
@@ -177,7 +189,11 @@ void conn_context_destroy_all(int epoll_fd) {
 void conn_context_sweep_cleanup(void) {
     // H5: Use dynamic deferred cleanup queue
     for (int i = 0; i < deferred_count; i++) {
-        free(deferred_cleanup_dynamic[i]);
+        if (deferred_cleanup_dynamic[i]) {
+            buf_free(&deferred_cleanup_dynamic[i]->client_to_backend);
+            buf_free(&deferred_cleanup_dynamic[i]->backend_to_client);
+            free(deferred_cleanup_dynamic[i]);
+        }
     }
     deferred_count = 0;
 }
