@@ -27,7 +27,12 @@ $(BIN_DIR):
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Clean build artifacts
+# Unit Tests
+test_buffer: tests/test_buffer.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_buffer tests/test_buffer.c
+	./$(BIN_DIR)/test_buffer
+
 clean:
 	rm -f $(SRC_DIR)/*.o $(TARGET)
 
-.PHONY: all clean
+.PHONY: all clean test_buffer
