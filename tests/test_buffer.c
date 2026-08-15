@@ -75,10 +75,43 @@ static void test_circular_wrap_and_drain(void) {
     buf_free(&buf);
 }
 
+
+static void test_saturation_stress(void) {
+    size_t capacities[] = {1024, 2048, 4096, 8192, 16384, 65536};
+    for (size_t i = 0; i < sizeof(capacities)/sizeof(capacities[0]); i++) {
+        size_t cap = capacities[i];
+        IOBuffer buf;
+        assert(buf_init(&buf, cap) == 0);
+        
+        // Ensure available space equals cap - 1
+        assert(buf_available_space(&buf) == cap - 1);
+        assert(buf_available_data(&buf) == 0);
+        
+        // Write exactly cap - 1 bytes
+        size_t w = buf_contiguous_write(&buf);
+        assert(w == cap - 1);
+        memset(buf_write_ptr(&buf), 0x5A, w);
+        buf_advance_tail(&buf, w);
+        
+        assert(buf_available_data(&buf) == cap - 1);
+        assert(buf_available_space(&buf) == 0);
+        assert(buf_contiguous_write(&buf) == 0);
+        
+        // Reset and test reset behavior
+        buf_reset(&buf);
+        assert(buf.head == 0 && buf.tail == 0);
+        assert(buf_available_data(&buf) == 0);
+        assert(buf_available_space(&buf) == cap - 1);
+        
+        buf_free(&buf);
+    }
+}
+
 int main(void) {
     printf("[*] Running test_buffer: boundary and circular wrap tests...\n");
     test_boundary_wrap();
     test_circular_wrap_and_drain();
+    test_saturation_stress();
     printf("[PASS] All ring buffer boundary and circular tests passed.\n");
     return 0;
 }
