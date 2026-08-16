@@ -79,7 +79,14 @@ ConnectionContext *conn_context_create(int client_fd, const Route *route, const 
     ctx->route = route;
     ctx->last_activity = get_monotonic_secs();  // H2: Initialize with monotonic clock
 
+    if (!route) {
+        LOG_ERROR("conn_context_create: Route pointer must not be NULL.");
+        free(ctx);
+        return NULL;
+    }
+
     size_t buf_size = (config && config->io_buffer_size > 0) ? (size_t)config->io_buffer_size : IO_BUFFER_SIZE;
+    LOG_DEBUG("Allocating connection buffers with capacity %zu bytes", buf_size);
     if (buf_init(&ctx->client_to_backend, buf_size) < 0) {
         free(ctx);
         return NULL;
