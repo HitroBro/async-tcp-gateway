@@ -208,12 +208,15 @@ void conn_context_sweep_cleanup(void) {
 
 void conn_context_sweep_idle(int epoll_fd, const GatewayConfig *config) {
     time_t now = get_monotonic_secs();  // H2: Use monotonic clock
+    time_t timeout = (config && config->connection_idle_timeout_secs > 0) ?
+                     config->connection_idle_timeout_secs : CONNECTION_IDLE_TIMEOUT_SECS;
+
     for (int i = 0; i < active_count; ) {
         ConnectionContext *ctx = active_connections[i];
         if (ctx->state == CONN_STATE_ESTABLISHED) {
-            if (now - ctx->last_activity > CONNECTION_IDLE_TIMEOUT_SECS) {
-                LOG_INFO("Closing idle connection: Client FD %d, Backend FD %d (idle %ld secs)",
-                         ctx->client_fd, ctx->backend_fd, now - ctx->last_activity);
+            if (now - ctx->last_activity > timeout) {
+                LOG_INFO("Closing idle connection: Client FD %d, Backend FD %d (idle %ld secs, timeout %ld secs)",
+                         ctx->client_fd, ctx->backend_fd, now - ctx->last_activity, (long)timeout);
                 conn_context_destroy(epoll_fd, ctx);
                 // Don't increment i, conn_context_destroy already removed this element
                 continue;
