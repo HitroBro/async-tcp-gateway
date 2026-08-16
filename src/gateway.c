@@ -206,7 +206,7 @@ void conn_context_sweep_cleanup(void) {
     deferred_count = 0;
 }
 
-void conn_context_sweep_idle(int epoll_fd) {
+void conn_context_sweep_idle(int epoll_fd, const GatewayConfig *config) {
     time_t now = get_monotonic_secs();  // H2: Use monotonic clock
     for (int i = 0; i < active_count; ) {
         ConnectionContext *ctx = active_connections[i];

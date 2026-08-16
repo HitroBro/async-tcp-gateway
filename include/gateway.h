@@ -160,7 +160,7 @@ ConnectionContext *conn_context_create(int client_fd, const Route *route, const 
 void conn_context_destroy(int epoll_fd, ConnectionContext *ctx);
 void conn_context_destroy_all(int epoll_fd);
 void conn_context_sweep_cleanup(void);
-void conn_context_sweep_idle(int epoll_fd);  // Close connections idle beyond timeout
+void conn_context_sweep_idle(int epoll_fd, const GatewayConfig *config);  // Close connections idle beyond timeout
 
 // Metrics functions
 void metrics_dump(const GatewayConfig *config);

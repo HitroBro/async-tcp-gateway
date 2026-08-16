@@ -258,7 +258,7 @@ int event_loop_run(const GatewayConfig *config) {
                 if (bytes_read == sizeof(expirations)) {
                     LOG_INFO("Background timer tick detected (expirations: %lu).", (unsigned long)expirations);
                     router_sweep_health_probes(epoll_fd, (GatewayConfig *)config);
-                    conn_context_sweep_idle(epoll_fd);  // Check for idle connections
+                    conn_context_sweep_idle(epoll_fd, config);  // Check for idle connections
                 }
             } else if (token->role == ROLE_SIGNAL) {
                 struct signalfd_siginfo fdsi;
