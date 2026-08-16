@@ -134,7 +134,9 @@ int config_load(const char *filepath, GatewayConfig *config) {
                         }
                     } else if (strcmp(key, "io_buffer_size") == 0) {
                         if (parse_int(val, &config->io_buffer_size, 1024, 1048576) != 0) {
-                            LOG_WARN("Invalid io_buffer_size value '%s' on line %d. Using default %d.", val, line_num, IO_BUFFER_SIZE);
+                            LOG_WARN("Invalid io_buffer_size value '%s' on line %d. Using default %d (allowed range: 1024 to 1048576).", val, line_num, IO_BUFFER_SIZE);
+                        } else {
+                            LOG_INFO("Configured dynamic connection buffer size: %d bytes", config->io_buffer_size);
                         }
                     } else if (strcmp(key, "max_consecutive_failures") == 0) {
                         if (parse_int(val, &config->max_consecutive_failures, 1, 100) != 0) {
