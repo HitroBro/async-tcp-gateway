@@ -158,7 +158,7 @@ void conn_context_destroy(int epoll_fd, ConnectionContext *ctx) {
         ctx->target_backend->active_connections--;
     }
 
-    // H5: Use dynamic deferred cleanup queue
+    // H5: Use dynamic deferred cleanup queue with dynamic buffer reclamation
     if (ensure_deferred_capacity(deferred_count + 1) < 0) {
         LOG_WARN("Deferred cleanup queue reallocation failed; executing fallback immediate free.");
         buf_free(&ctx->client_to_backend);
