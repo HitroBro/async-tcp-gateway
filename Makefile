@@ -32,7 +32,11 @@ test_buffer: tests/test_buffer.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_buffer tests/test_buffer.c
 	./$(BIN_DIR)/test_buffer
 
+test_config: src/config.o src/logger.o tests/test_config.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_config tests/test_config.c src/config.o src/logger.o
+	./$(BIN_DIR)/test_config
+
 clean:
 	rm -f $(SRC_DIR)/*.o $(TARGET)
 
-.PHONY: all clean test_buffer
+.PHONY: all clean test_buffer test_config
