@@ -24,7 +24,7 @@
 
 // Represents a single destination backend server
 typedef struct {
-    char ip[INET_ADDRSTRLEN];
+    char ip[INET6_ADDRSTRLEN];
     int port;
     int is_alive; 
     int active_connections;
