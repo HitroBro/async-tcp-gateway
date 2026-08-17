@@ -5,6 +5,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
+#include <arpa/inet.h>
 
 // Internal helper: Strips leading and trailing whitespace/newlines from a string
 static char *trim_whitespace(char *str) {
@@ -37,6 +38,41 @@ static int parse_int(const char *str, int *out_val, int min_val, int max_val) {
     }
     *out_val = (int)val;
     return 0;
+}
+
+// Parses backend address strings supporting [ipv6]:port, ipv4:port, or host:port
+static int parse_backend_endpoint(const char *str, char *out_ip, size_t ip_len, int *out_port) {
+    if (!str || !out_ip || !out_port || ip_len == 0) return -1;
+
+    if (str[0] == '[') {
+        // Bracketed IPv6 notation: [2001:db8::1]:8080
+        const char *close_bracket = strchr(str, ']');
+        if (!close_bracket || close_bracket[1] != ':') {
+            return -1; // Malformed bracketed address
+        }
+        size_t addr_len = (size_t)(close_bracket - str - 1);
+        if (addr_len == 0 || addr_len >= ip_len) {
+            return -1; // Address too long or empty
+        }
+        memcpy(out_ip, str + 1, addr_len);
+        out_ip[addr_len] = '\0';
+
+        return parse_int(close_bracket + 2, out_port, 1, 65535);
+    }
+
+    // Standard host:port or ipv4:port
+    const char *colon = strrchr(str, ':');
+    if (!colon || colon == str) {
+        return -1;
+    }
+    size_t addr_len = (size_t)(colon - str);
+    if (addr_len == 0 || addr_len >= ip_len) {
+        return -1;
+    }
+    memcpy(out_ip, str, addr_len);
+    out_ip[addr_len] = '\0';
+
+    return parse_int(colon + 1, out_port, 1, 65535);
 }
 
 int config_load(const char *filepath, GatewayConfig *config) {
@@ -179,21 +215,15 @@ int config_load(const char *filepath, GatewayConfig *config) {
 
                 BackendServer *backend = &current_route->backends[current_route->backend_count];
                 
-                // Parse IP:PORT safely using width specifier %15[^:] to prevent buffer overflows!
-                int parsed = sscanf(val, "%15[^:]:%d", backend->ip, &backend->port);
-                if (parsed == 2) {
-                    // Validate port range
-                    if (backend->port <= 0 || backend->port > 65535) {
-                        LOG_ERROR("Invalid backend port %d on line %d (must be 1-65535)", backend->port, line_num);
-                    } else {
-                        backend->is_alive = 1;
-                        backend->active_connections = 0;
-                        backend->consecutive_failures = 0;
-                        backend->probe_fd = -1; // -1 indicates NO active health check socket
-                        current_route->backend_count++;
-                    }
+                int parsed = parse_backend_endpoint(val, backend->ip, sizeof(backend->ip), &backend->port);
+                if (parsed == 0) {
+                    backend->is_alive = 1;
+                    backend->active_connections = 0;
+                    backend->consecutive_failures = 0;
+                    backend->probe_fd = -1; // -1 indicates NO active health check socket
+                    current_route->backend_count++;
                 } else {
-                    LOG_ERROR("Malformed backend target on line %d: %s (Expected format IP:PORT)", line_num, val);
+                    LOG_ERROR("Malformed backend target on line %d: %s (Expected format [IPv6]:PORT or IP:PORT)", line_num, val);
                 }
             } else if (strcmp(key, "max_consecutive_failures") == 0) {
                 if (parse_int(val, &current_route->max_consecutive_failures, 1, 100) != 0) {
