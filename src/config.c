@@ -217,6 +217,7 @@ int config_load(const char *filepath, GatewayConfig *config) {
                 
                 int parsed = parse_backend_endpoint(val, backend->ip, sizeof(backend->ip), &backend->port);
                 if (parsed == 0) {
+                    LOG_DEBUG("Parsed backend target: %s:%d", backend->ip, backend->port);
                     backend->is_alive = 1;
                     backend->active_connections = 0;
                     backend->consecutive_failures = 0;
