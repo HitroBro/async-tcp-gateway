@@ -57,6 +57,11 @@ static int parse_backend_endpoint(const char *str, char *out_ip, size_t ip_len, 
         memcpy(out_ip, str + 1, addr_len);
         out_ip[addr_len] = '\0';
 
+        // Validate IPv6 syntax using inet_pton
+        struct in6_addr a6;
+        if (inet_pton(AF_INET6, out_ip, &a6) != 1) {
+            return -1; // Invalid IPv6 format
+        }
         return parse_int(close_bracket + 2, out_port, 1, 65535);
     }
 
