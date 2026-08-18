@@ -26,7 +26,8 @@ int main(void) {
         "[route]\n"
         "frontend_port = 8080\n"
         "backend = 127.0.0.1:9001\n"
-        "backend = 127.0.0.1:9002\n";
+        "backend = [::1]:9002\n"
+        "backend = [2001:db8::1]:9003\n";
 
     ssize_t written = write(fd, cfg_data, strlen(cfg_data));
     assert(written == (ssize_t)strlen(cfg_data));
@@ -47,7 +48,13 @@ int main(void) {
     assert(config.max_connections_per_sec == 500);
     assert(config.max_connections_per_ip_per_sec == 25);
     assert(config.routes[0].frontend_port == 8080);
-    assert(config.routes[0].backend_count == 2);
+    assert(config.routes[0].backend_count == 3);
+    assert(strcmp(config.routes[0].backends[0].ip, "127.0.0.1") == 0);
+    assert(config.routes[0].backends[0].port == 9001);
+    assert(strcmp(config.routes[0].backends[1].ip, "::1") == 0);
+    assert(config.routes[0].backends[1].port == 9002);
+    assert(strcmp(config.routes[0].backends[2].ip, "2001:db8::1") == 0);
+    assert(config.routes[0].backends[2].port == 9003);
 
     printf("[PASS] test_config passed successfully.\n");
     return 0;
