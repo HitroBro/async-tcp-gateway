@@ -152,6 +152,9 @@ max_connections_per_ip_per_sec = 50 # Per-IP connection rate limit (tokens/sec)
 frontend_port = 8080
 backend = 127.0.0.1:9001
 backend = 127.0.0.1:9002
+# Dual-stack IPv6 bracketed endpoints are fully supported:
+# backend = [::1]:9001
+# backend = [2001:db8::1]:9002
 
 # Route 2: Listen on port 8888, balance across 3 backends
 [route]
