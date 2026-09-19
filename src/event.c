@@ -483,8 +483,9 @@ static void handle_proxy_event(int epoll_fd, EndpointToken *token, uint32_t even
             int getsock_res = getsockopt(ready_fd, SOL_SOCKET, SO_ERROR, &socket_error, &len);
 
             if ((events & (EPOLLERR | EPOLLHUP)) || getsock_res < 0 || socket_error != 0) {
-                            LOG_WARN("Asynchronous handshake rejected by %s:%d. Triggering failover...",
-                                     ctx->target_backend->ip, ctx->target_backend->port);
+                LOG_WARN("Asynchronous connect to %s:%d failed (%s, events=0x%x). Triggering failover...",
+                         ctx->target_backend->ip, ctx->target_backend->port,
+                         socket_error ? strerror(socket_error) : "Hangup/Error", events);
                
                             router_mark_backend_down(ctx->target_backend, ctx->route->max_consecutive_failures);
                             epoll_ctl(epoll_fd, EPOLL_CTL_DEL, ctx->backend_fd, NULL);
