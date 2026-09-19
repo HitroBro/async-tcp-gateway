@@ -477,11 +477,12 @@ static void handle_proxy_event(int epoll_fd, EndpointToken *token, uint32_t even
 
     // PHASE 1: Asynchronous Handshake Verification & Failover Logic (prioritized before generic error trap)
     if (ctx->state == CONN_STATE_CONNECTING) {
-        if (token->role == ROLE_BACKEND && (events & EPOLLOUT)) {
+        if (token->role == ROLE_BACKEND) {
             int socket_error = 0;
             socklen_t len = sizeof(socket_error);
+            int getsock_res = getsockopt(ready_fd, SOL_SOCKET, SO_ERROR, &socket_error, &len);
 
-            if (getsockopt(ready_fd, SOL_SOCKET, SO_ERROR, &socket_error, &len) < 0 || socket_error != 0) {
+            if ((events & (EPOLLERR | EPOLLHUP)) || getsock_res < 0 || socket_error != 0) {
                             LOG_WARN("Asynchronous handshake rejected by %s:%d. Triggering failover...",
                                      ctx->target_backend->ip, ctx->target_backend->port);
                
