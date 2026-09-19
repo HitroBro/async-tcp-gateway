@@ -452,7 +452,9 @@ static int initiate_backend_connection(int epoll_fd, ConnectionContext *ctx) {
             // Immediate connection finalized (common on local loopback sockets)
             ctx->state = CONN_STATE_ESTABLISHED;
             router_report_backend_success(ctx->target_backend);
-            LOG_INFO("Immediate connection established to %s:%d.", target->ip, target->port);
+            LOG_INFO("Immediate connection established to %s:%d (FD: %d).", target->ip, target->port, fd);
+        } else {
+            LOG_DEBUG("Asynchronous non-blocking connect in progress for %s:%d (FD: %d)", target->ip, target->port, fd);
         }
 
         struct epoll_event ev;
