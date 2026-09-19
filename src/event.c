@@ -488,12 +488,15 @@ static void handle_proxy_event(int epoll_fd, EndpointToken *token, uint32_t even
                          socket_error ? strerror(socket_error) : "Hangup/Error", events);
                
                             router_mark_backend_down(ctx->target_backend, ctx->route->max_consecutive_failures);
-                            epoll_ctl(epoll_fd, EPOLL_CTL_DEL, ctx->backend_fd, NULL);
-                            close(ctx->backend_fd);
-                            ctx->backend_fd = -1;
-                            ctx->backend_token.fd = -1;
+                if (ctx->backend_fd >= 0) {
+                    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, ctx->backend_fd, NULL);
+                    close(ctx->backend_fd);
+                    ctx->backend_fd = -1;
+                    ctx->backend_token.fd = -1;
+                }
 
                 if (initiate_backend_connection(epoll_fd, ctx) < 0) {
+                    LOG_ERROR("Failover exhausted: Unable to connect to any backend for Client FD %d", ctx->client_fd);
                     conn_context_destroy(epoll_fd, ctx);
                 }
                 return;
