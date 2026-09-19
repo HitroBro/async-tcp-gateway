@@ -475,17 +475,7 @@ static void handle_proxy_event(int epoll_fd, EndpointToken *token, uint32_t even
 
     if (ctx->state == CONN_STATE_CLOSING) return;
 
-    // Direct Error Trap Handlers
-    if (events & (EPOLLERR | EPOLLHUP)) {
-        LOG_WARN("Socket hardware hangup/error detected on FD %d.", ready_fd);
-        if (token->role == ROLE_BACKEND && ctx->target_backend && ctx->route) {
-            router_mark_backend_down(ctx->target_backend, ctx->route->max_consecutive_failures);
-        }
-        conn_context_destroy(epoll_fd, ctx);
-        return;
-    }
-
-    // PHASE 1: Asynchronous Handshake Verification & Failover Logic
+    // PHASE 1: Asynchronous Handshake Verification & Failover Logic (prioritized before generic error trap)
     if (ctx->state == CONN_STATE_CONNECTING) {
         if (token->role == ROLE_BACKEND && (events & EPOLLOUT)) {
             int socket_error = 0;
@@ -517,6 +507,16 @@ static void handle_proxy_event(int epoll_fd, EndpointToken *token, uint32_t even
             update_epoll_interests(epoll_fd, &ctx->client_token, EPOLLIN, &ctx->client_to_backend);
             return;
         }
+    }
+
+    // Direct Error Trap Handlers (for established data streaming or client disconnects)
+    if (events & (EPOLLERR | EPOLLHUP)) {
+        LOG_WARN("Socket hardware hangup/error detected on FD %d.", ready_fd);
+        if (token->role == ROLE_BACKEND && ctx->target_backend && ctx->route) {
+            router_mark_backend_down(ctx->target_backend, ctx->route->max_consecutive_failures);
+        }
+        conn_context_destroy(epoll_fd, ctx);
+        return;
     }
 
     // PHASE 2: Standard Bidirectional Stream Data Processing Loop
