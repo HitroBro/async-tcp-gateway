@@ -430,6 +430,8 @@ static int initiate_backend_connection(int epoll_fd, ConnectionContext *ctx) {
 
         // Store the target pointer in our context so we know who we are talking to if async errors occur!
         ctx->target_backend = (BackendServer *)target;
+        LOG_INFO("Initiating failover connection to backend %s:%d for Client FD %d",
+                 target->ip, target->port, ctx->client_fd);
 
         int fd = -1;
         int ret = net_connect_async(target->ip, target->port, &fd);
