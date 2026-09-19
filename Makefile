@@ -36,7 +36,11 @@ test_config: src/config.o src/logger.o tests/test_config.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_config tests/test_config.c src/config.o src/logger.o
 	./$(BIN_DIR)/test_config
 
+test_failover: src/router.o src/net.o src/gateway.o src/logger.o tests/test_failover.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_failover tests/test_failover.c src/router.o src/net.o src/gateway.o src/logger.o
+	./$(BIN_DIR)/test_failover
+
 clean:
 	rm -f $(SRC_DIR)/*.o $(TARGET)
 
-.PHONY: all clean test_buffer test_config
+.PHONY: all clean test_buffer test_config test_failover
