@@ -4,6 +4,7 @@
 #include "net.h"
 #include "gateway.h"
 #include "router.h"
+#include "ratelimit.h"
 #include "logger.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,13 +31,8 @@ static int listener_token_count = 0;
 // M3: Rate limiting - global token bucket
 static TokenBucket global_bucket;
 
-// M3: Rate limiting - per-IP token buckets (simple array, max 1024 entries)
-#define MAX_IP_BUCKETS 1024
-static struct {
-    uint32_t ip;
-    TokenBucket bucket;
-    int in_use;
-} ip_buckets[MAX_IP_BUCKETS];
+// Scalable hash table rate limiter with IPv4/IPv6 support and TTL eviction
+static IPRateLimiter g_ip_limiter;
 
 // Internal forward declarations for event processing helpers
 static void handle_listener_event(int epoll_fd, EndpointToken *token, const GatewayConfig *config);
@@ -86,10 +82,8 @@ int event_loop_run(const GatewayConfig *config) {
     global_bucket.refill_rate_per_sec = config->max_connections_per_sec;
     global_bucket.last_refill = time(NULL);
     
-    // M3: Initialize per-IP token buckets
-    for (int i = 0; i < MAX_IP_BUCKETS; i++) {
-        ip_buckets[i].in_use = 0;
-    }
+    // Initialize scalable dual-stack per-IP rate limiter
+    ip_ratelimit_init(&g_ip_limiter, RATE_LIMIT_MAX_ENTRIES, RATE_LIMIT_DEFAULT_TTL);
 
     // Create and register a listener for each route
     for (int r = 0; r < config->route_count; r++) {
@@ -332,38 +326,11 @@ static void handle_listener_event(int epoll_fd, EndpointToken *token, const Gate
             continue;
         }
         
-        // M3: Rate limiting - check per-IP token bucket
-        uint32_t client_ip_addr = 0;
-        if (client_addr.ss_family == AF_INET) {
-            client_ip_addr = ((struct sockaddr_in *)&client_addr)->sin_addr.s_addr;
-        }
-        
-        // Find or create IP bucket
-        int bucket_idx = -1;
-        for (int i = 0; i < MAX_IP_BUCKETS; i++) {
-            if (!ip_buckets[i].in_use) {
-                if (bucket_idx == -1) bucket_idx = i;
-            } else if (ip_buckets[i].ip == client_ip_addr) {
-                bucket_idx = i;
-                break;
-            }
-        }
-        
-        if (bucket_idx != -1) {
-            if (!ip_buckets[bucket_idx].in_use) {
-                ip_buckets[bucket_idx].ip = client_ip_addr;
-                ip_buckets[bucket_idx].bucket.tokens = config->max_connections_per_ip_per_sec;
-                ip_buckets[bucket_idx].bucket.max_tokens = config->max_connections_per_ip_per_sec;
-                ip_buckets[bucket_idx].bucket.refill_rate_per_sec = config->max_connections_per_ip_per_sec;
-                ip_buckets[bucket_idx].bucket.last_refill = time(NULL);
-                ip_buckets[bucket_idx].in_use = 1;
-            }
-            
-            if (!token_bucket_consume(&ip_buckets[bucket_idx].bucket)) {
-                LOG_WARN("Per-IP connection rate limit exceeded for %u, dropping connection", client_ip_addr);
-                close(client_fd);
-                continue;
-            }
+        // Scalable per-IP rate limiting (dual-stack IPv4/IPv6)
+        if (!ip_ratelimit_check(&g_ip_limiter, &client_addr, config->max_connections_per_ip_per_sec)) {
+            LOG_WARN("Per-IP connection rate limit exceeded, dropping connection on FD %d", client_fd);
+            close(client_fd);
+            continue;
         }
 
         char client_ip[INET6_ADDRSTRLEN];
