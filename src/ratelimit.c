@@ -150,3 +150,17 @@ void ip_ratelimit_sweep_idle(IPRateLimiter *limiter, time_t now) {
         LOG_DEBUG("Rate limiter swept %d idle entries (active: %d)", reclaimed, limiter->total_entries);
     }
 }
+
+void ip_ratelimit_cleanup(IPRateLimiter *limiter) {
+    if (!limiter) return;
+    for (size_t i = 0; i < RATE_LIMIT_HASH_SIZE; i++) {
+        IPRateEntry *curr = limiter->table[i];
+        while (curr) {
+            IPRateEntry *next = curr->next;
+            free(curr);
+            curr = next;
+        }
+        limiter->table[i] = NULL;
+    }
+    limiter->total_entries = 0;
+}

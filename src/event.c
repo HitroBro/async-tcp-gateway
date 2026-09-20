@@ -298,6 +298,7 @@ int event_loop_run(const GatewayConfig *config) {
         listener_token_count = 0;
 
         conn_context_destroy_all(epoll_fd);
+        ip_ratelimit_cleanup(&g_ip_limiter);
 
     close(sig_fd);
     close(timer_fd);
