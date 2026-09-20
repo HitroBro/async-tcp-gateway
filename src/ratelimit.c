@@ -87,6 +87,20 @@ int ip_ratelimit_check(IPRateLimiter *limiter, const struct sockaddr_storage *cl
         curr = curr->next;
     }
 
+    // Check capacity and sweep or evict if full
+    if (limiter->total_entries >= limiter->max_entries) {
+        ip_ratelimit_sweep_idle(limiter, now);
+        if (limiter->total_entries >= limiter->max_entries) {
+            // Evict oldest node at head of current bucket
+            if (limiter->table[idx]) {
+                IPRateEntry *evicted = limiter->table[idx];
+                limiter->table[idx] = evicted->next;
+                free(evicted);
+                limiter->total_entries--;
+            }
+        }
+    }
+
     // New IP: allocate and insert
     IPRateEntry *entry = (IPRateEntry *)malloc(sizeof(IPRateEntry));
     if (!entry) {
