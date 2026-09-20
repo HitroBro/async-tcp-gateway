@@ -40,7 +40,11 @@ test_failover: src/router.o src/net.o src/gateway.o src/logger.o tests/test_fail
 	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_failover tests/test_failover.c src/router.o src/net.o src/gateway.o src/logger.o
 	./$(BIN_DIR)/test_failover
 
+test_ratelimit: src/ratelimit.o src/logger.o tests/test_ratelimit.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_ratelimit tests/test_ratelimit.c src/ratelimit.o src/logger.o
+	./$(BIN_DIR)/test_ratelimit
+
 clean:
 	rm -f $(SRC_DIR)/*.o $(TARGET)
 
-.PHONY: all clean test_buffer test_config test_failover
+.PHONY: all clean test_buffer test_config test_failover test_ratelimit
