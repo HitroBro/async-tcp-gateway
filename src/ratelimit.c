@@ -113,3 +113,26 @@ int ip_ratelimit_check(IPRateLimiter *limiter, const struct sockaddr_storage *cl
 
     return token_bucket_consume_entry(&entry->bucket, rate_per_sec, now);
 }
+
+void ip_ratelimit_sweep_idle(IPRateLimiter *limiter, time_t now) {
+    if (!limiter) return;
+    int reclaimed = 0;
+
+    for (size_t i = 0; i < RATE_LIMIT_HASH_SIZE; i++) {
+        IPRateEntry **curr_ptr = &limiter->table[i];
+        while (*curr_ptr) {
+            IPRateEntry *entry = *curr_ptr;
+            if (now - entry->last_seen > limiter->ttl_secs) {
+                *curr_ptr = entry->next;
+                free(entry);
+                limiter->total_entries--;
+                reclaimed++;
+            } else {
+                curr_ptr = &entry->next;
+            }
+        }
+    }
+    if (reclaimed > 0) {
+        LOG_DEBUG("Rate limiter swept %d idle entries (active: %d)", reclaimed, limiter->total_entries);
+    }
+}
