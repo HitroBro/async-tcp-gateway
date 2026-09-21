@@ -75,7 +75,8 @@ int ip_ratelimit_check(IPRateLimiter *limiter, const struct sockaddr_storage *cl
 
     time_t now = time(NULL);
     uint32_t hash = hash_sockaddr(client_addr);
-    size_t idx = hash % RATE_LIMIT_HASH_SIZE;
+    // Optimized fast power-of-two bitmask indexing
+    size_t idx = (size_t)(hash & (RATE_LIMIT_HASH_SIZE - 1));
 
     // Search existing bucket
     IPRateEntry *curr = limiter->table[idx];
