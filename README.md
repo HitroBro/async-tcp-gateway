@@ -42,7 +42,7 @@ Client → [Gateway:8080] → Backend Pool (127.0.0.1:9001, 127.0.0.1:9002, ...)
 | **Metrics/Observability** | SIGUSR1 dumps connection stats, byte counters, route/backend status |
 | **CLI Config** | `-c /path/to.conf` custom config, `-h` help |
 | **Zero-Copy Friendly** | `MSG_NOSIGNAL`, non-blocking I/O, deferred cleanup |
-| **Rate Limiting** | Token bucket per-IP and global connection rate limiting |
+| **Rate Limiting** | Scalable hash table token bucket with dual-stack IPv4/IPv6 support and automatic TTL eviction |
 | **TCP Optimizations** | `TCP_NODELAY` (disable Nagle), `SO_KEEPALIVE` with custom timing |
 | **Monotonic Clock** | `CLOCK_MONOTONIC` for idle timeout (NTP-safe) |
 | **Atomic Metrics** | Lock-free counters using C11 `_Atomic` for thread safety |
