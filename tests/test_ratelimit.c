@@ -41,6 +41,21 @@ int main(void) {
     assert(limiter.total_entries == 2);
     ip_ratelimit_cleanup(&limiter);
     assert(limiter.total_entries == 0);
+    // Test TTL sweeping
+    IPRateLimiter ttl_limiter;
+    ip_ratelimit_init(&ttl_limiter, 100, 5); // 5-second TTL
+    assert(ip_ratelimit_check(&ttl_limiter, &ss4, 10) == 1);
+    assert(ttl_limiter.total_entries == 1);
+
+    // Immediate sweep should retain recent entry
+    ip_ratelimit_sweep_idle(&ttl_limiter, time(NULL));
+    assert(ttl_limiter.total_entries == 1);
+
+    // Simulated sweep after TTL expiry (now + 10s)
+    ip_ratelimit_sweep_idle(&ttl_limiter, time(NULL) + 10);
+    assert(ttl_limiter.total_entries == 0);
+    ip_ratelimit_cleanup(&ttl_limiter);
+
 
     printf("[PASS] test_ratelimit unit tests passed.\n");
     return 0;
