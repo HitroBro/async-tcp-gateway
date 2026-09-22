@@ -153,6 +153,12 @@ struct ConnectionContext {
     EndpointToken backend_token;
 
     time_t last_activity;  // Timestamp of last read/write activity for idle timeout (monotonic clock)
+
+    // TCP Half-Close (FIN) tracking flags
+    int client_read_closed;   // Client sent FIN (EOF on recv)
+    int backend_read_closed;  // Backend sent FIN (EOF on recv)
+    int client_write_closed;  // shutdown(client_fd, SHUT_WR) sent
+    int backend_write_closed; // shutdown(backend_fd, SHUT_WR) sent
 };
 
 // Allocates and initializes a brand new connection context
