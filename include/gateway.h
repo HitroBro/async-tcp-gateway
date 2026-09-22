@@ -167,6 +167,15 @@ static inline int conn_is_half_closed(const ConnectionContext *ctx) {
             ctx->client_write_closed || ctx->backend_write_closed);
 }
 
+static inline int conn_is_fully_closed(const ConnectionContext *ctx) {
+    if (!ctx) return 1;
+    // Both endpoints have either received FIN or finished transmitting SHUT_WR
+    return (ctx->client_read_closed && ctx->backend_read_closed) ||
+           (ctx->client_write_closed && ctx->backend_write_closed) ||
+           (ctx->client_read_closed && ctx->backend_write_closed &&
+            ctx->backend_read_closed && ctx->client_write_closed);
+}
+
 // Allocates and initializes a brand new connection context
 ConnectionContext *conn_context_create(int client_fd, const Route *route, const GatewayConfig *config);
 void conn_context_destroy(int epoll_fd, ConnectionContext *ctx);
