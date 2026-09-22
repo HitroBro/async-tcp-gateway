@@ -161,6 +161,12 @@ struct ConnectionContext {
     int backend_write_closed; // shutdown(backend_fd, SHUT_WR) sent
 };
 
+static inline int conn_is_half_closed(const ConnectionContext *ctx) {
+    if (!ctx) return 0;
+    return (ctx->client_read_closed || ctx->backend_read_closed ||
+            ctx->client_write_closed || ctx->backend_write_closed);
+}
+
 // Allocates and initializes a brand new connection context
 ConnectionContext *conn_context_create(int client_fd, const Route *route, const GatewayConfig *config);
 void conn_context_destroy(int epoll_fd, ConnectionContext *ctx);
