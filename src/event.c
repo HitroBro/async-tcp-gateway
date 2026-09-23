@@ -525,9 +525,21 @@ static void process_socket_read(int epoll_fd, ConnectionContext *ctx, int from_f
 
         ssize_t bytes = recv(from_fd, buf_write_ptr(buf), space, 0);
         if (bytes == 0) {
-            LOG_INFO("Graceful stream close detected via connection endpoint FD %d.", from_fd);
-            conn_context_destroy(epoll_fd, ctx);
-            return;
+            LOG_INFO("Graceful stream close (FIN) detected on endpoint FD %d.", from_fd);
+            if (from_fd == ctx->client_fd) {
+                ctx->client_read_closed = 1;
+            } else {
+                ctx->backend_read_closed = 1;
+            }
+
+            EndpointToken *from_token = (from_fd == ctx->client_fd) ? &ctx->client_token : &ctx->backend_token;
+            update_epoll_interests(epoll_fd, from_token, 0, buf);
+
+            if (conn_is_fully_closed(ctx)) {
+                conn_context_destroy(epoll_fd, ctx);
+                return;
+            }
+            break;
         }
         if (bytes < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) break; // Input queue fully drained
