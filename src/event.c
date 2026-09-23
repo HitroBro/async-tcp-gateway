@@ -535,11 +535,29 @@ static void process_socket_read(int epoll_fd, ConnectionContext *ctx, int from_f
             EndpointToken *from_token = (from_fd == ctx->client_fd) ? &ctx->client_token : &ctx->backend_token;
             update_epoll_interests(epoll_fd, from_token, 0, buf);
 
+            // Attempt immediate flush pass of any remaining data in the buffer to to_fd
+            if (buf_available_data(buf) > 0) {
+                process_socket_write(epoll_fd, ctx, to_fd, from_fd, buf);
+                if (ctx->state == CONN_STATE_CLOSING) return;
+            }
+
+            // If buffer is now empty, propagate half-close via shutdown(to_fd, SHUT_WR)
+            if (buf_available_data(buf) == 0) {
+                if (to_fd == ctx->client_fd && !ctx->client_write_closed) {
+                    shutdown(to_fd, SHUT_WR);
+                    ctx->client_write_closed = 1;
+                    LOG_DEBUG("Propagated half-close (SHUT_WR) to Client FD %d", to_fd);
+                } else if (to_fd == ctx->backend_fd && !ctx->backend_write_closed) {
+                    shutdown(to_fd, SHUT_WR);
+                    ctx->backend_write_closed = 1;
+                    LOG_DEBUG("Propagated half-close (SHUT_WR) to Backend FD %d", to_fd);
+                }
+            }
+
             if (conn_is_fully_closed(ctx)) {
                 conn_context_destroy(epoll_fd, ctx);
-                return;
             }
-            break;
+            return;
         }
         if (bytes < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) break; // Input queue fully drained
