@@ -619,16 +619,18 @@ static void process_socket_write(int epoll_fd, ConnectionContext *ctx, int to_fd
         return;
     }
 
-    // M1: Backpressure - re-enable EPOLLIN on the from_fd now that buffer has space
+    // Update epoll interests accurately for both directions:
+    // 1. Target socket (to_fd) received data; only needs EPOLLOUT if its outgoing buffer still has data
+    EndpointToken *to_token = (to_fd == ctx->client_fd) ? &ctx->client_token : &ctx->backend_token;
+    int to_read_closed = (to_fd == ctx->client_fd) ? ctx->client_read_closed : ctx->backend_read_closed;
+    IOBuffer *to_out_buf = (to_fd == ctx->client_fd) ? &ctx->backend_to_client : &ctx->client_to_backend;
+    update_epoll_interests(epoll_fd, to_token, to_read_closed ? 0 : EPOLLIN, to_out_buf);
+
+    // 2. Source socket (from_fd) buffer was drained; re-enable EPOLLIN if its read side is still open
     EndpointToken *from_token = (from_fd == ctx->client_fd) ? &ctx->client_token : &ctx->backend_token;
-    update_epoll_interests(epoll_fd, from_token, EPOLLIN, buf);
-
-    // Remove corporate interest in writable alerts to protect against looping spikes
-    EndpointToken *to_token   = (to_fd == ctx->client_fd)   ? &ctx->client_token : &ctx->backend_token;
-    EndpointToken *from_token2 = (from_fd == ctx->client_fd) ? &ctx->client_token : &ctx->backend_token;
-
-    update_epoll_interests(epoll_fd, to_token, EPOLLIN, buf);
-    update_epoll_interests(epoll_fd, from_token2, EPOLLIN, buf);
+    int from_read_closed = (from_fd == ctx->client_fd) ? ctx->client_read_closed : ctx->backend_read_closed;
+    IOBuffer *from_out_buf = (from_fd == ctx->client_fd) ? &ctx->backend_to_client : &ctx->client_to_backend;
+    update_epoll_interests(epoll_fd, from_token, from_read_closed ? 0 : EPOLLIN, from_out_buf);
 }
 
 static void update_epoll_interests(int epoll_fd, EndpointToken *token, uint32_t base_events, IOBuffer *buf) {
