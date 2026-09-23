@@ -603,6 +603,22 @@ static void process_socket_write(int epoll_fd, ConnectionContext *ctx, int to_fd
     // Buffer fully drained! Reset alignment tracking back to zero offsets
     buf_reset(buf);
 
+    // If source closed its write side and target write side is not yet closed, propagate SHUT_WR
+    if (from_fd == ctx->client_fd && ctx->client_read_closed && !ctx->backend_write_closed) {
+        shutdown(to_fd, SHUT_WR);
+        ctx->backend_write_closed = 1;
+        LOG_DEBUG("Deferred half-close (SHUT_WR) sent to Backend FD %d after buffer drain", to_fd);
+    } else if (from_fd == ctx->backend_fd && ctx->backend_read_closed && !ctx->client_write_closed) {
+        shutdown(to_fd, SHUT_WR);
+        ctx->client_write_closed = 1;
+        LOG_DEBUG("Deferred half-close (SHUT_WR) sent to Client FD %d after buffer drain", to_fd);
+    }
+
+    if (conn_is_fully_closed(ctx)) {
+        conn_context_destroy(epoll_fd, ctx);
+        return;
+    }
+
     // M1: Backpressure - re-enable EPOLLIN on the from_fd now that buffer has space
     EndpointToken *from_token = (from_fd == ctx->client_fd) ? &ctx->client_token : &ctx->backend_token;
     update_epoll_interests(epoll_fd, from_token, EPOLLIN, buf);
