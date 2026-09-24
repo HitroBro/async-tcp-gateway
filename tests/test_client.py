@@ -9,7 +9,7 @@ import argparse
 import sys
 import time
 
-def run_test(host, port, message, expected_prefix):
+def run_test(host, port, message, expected_prefix, half_close=False):
     print(f"============================================================")
     print(f"[*] Starting TCP Test Client")
     print(f"[*] Target Endpoint: {host}:{port}")
@@ -34,6 +34,10 @@ def run_test(host, port, message, expected_prefix):
         payload_bytes = message.encode('utf-8')
         print(f"[CLIENT SEND] Sending {len(payload_bytes)} bytes over the wire...")
         client_socket.sendall(payload_bytes)
+
+        if half_close:
+            print("[CLIENT HALF-CLOSE] Shutting down client write channel (SHUT_WR)...")
+            client_socket.shutdown(socket.SHUT_WR)
         
         # 4. Wait for and read response from the target
         print(f"[CLIENT RECV] Waiting for response...")
@@ -76,8 +80,9 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--port", type=int, default=8080, help="Target port (default: 8080 for Gateway)")
     parser.add_argument("-m", "--message", default="Hello from 404_Team_not_Found Layer 4 Proxy Test!", help="Message payload to send")
     parser.add_argument("-e", "--expected", default="[ECHO FROM BACKEND]:", help="Expected string prefix in response")
+    parser.add_argument("--half-close", action="store_true", help="Send SHUT_WR half-close after sending payload")
     
     args = parser.parse_args()
     
-    success = run_test(args.target, args.port, args.message, args.expected)
+    success = run_test(args.target, args.port, args.message, args.expected, args.half_close)
     sys.exit(0 if success else 1)
