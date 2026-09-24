@@ -35,8 +35,9 @@ Client → [Gateway:8080] → Backend Pool (127.0.0.1:9001, 127.0.0.1:9002, ...)
 | **Instant Failover** | Immediate retry on connection refusal or handshake failure |
 | **Health Checks** | Background timer (5s) initiates async TCP probes to DOWN backends |
 | **Auto-Recovery** | Successful probe automatically restores backend to rotation |
-| **Flow Control** | Ring buffers with dynamic `EPOLLOUT` registration for backpressure |
-| **Idle Timeout** | Connections idle >30s (configurable) are automatically closed |
+| **Flow Control** | Dynamic ring buffers with guard-byte boundary safety and `EPOLLOUT` backpressure |
+| **Idle Timeout** | Connections idle >30s (dynamically configurable per config) are automatically closed |
+| **TCP Half-Close** | Bidirectional TCP half-close with `shutdown(SHUT_WR)` propagation and buffer drain |
 | **IPv6 Dual-Stack** | `AF_UNSPEC` + `getaddrinfo` with `IPV6_V6ONLY=0` |
 | **Graceful Shutdown** | `signalfd` handles SIGINT/SIGTERM for clean teardown |
 | **Metrics/Observability** | SIGUSR1 dumps connection stats, byte counters, route/backend status |
@@ -90,6 +91,12 @@ Client → [Gateway:8080] → Backend Pool (127.0.0.1:9001, 127.0.0.1:9002, ...)
 ```bash
 make
 # Output: bin/gateway
+```
+
+### Automated Unit Tests
+```bash
+make test
+# Executes: test_buffer, test_config, test_failover, test_ratelimit
 ```
 
 ### Run Tests

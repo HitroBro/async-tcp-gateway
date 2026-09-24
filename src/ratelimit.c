@@ -37,7 +37,7 @@ void ip_ratelimit_init(IPRateLimiter *limiter, int max_entries, time_t ttl_secs)
     limiter->ttl_secs = (ttl_secs > 0) ? ttl_secs : RATE_LIMIT_DEFAULT_TTL;
 }
 
-static int token_bucket_consume_entry(TokenBucket *tb, int rate_per_sec, time_t now) {
+static int token_bucket_consume_entry(TokenBucket *tb, time_t now) {
     if (now > tb->last_refill) {
         int elapsed = (int)(now - tb->last_refill);
         int refill = elapsed * tb->refill_rate_per_sec;
@@ -83,7 +83,7 @@ int ip_ratelimit_check(IPRateLimiter *limiter, const struct sockaddr_storage *cl
     while (curr) {
         if (compare_addr(client_addr->ss_family, client_addr, curr)) {
             curr->last_seen = now;
-            return token_bucket_consume_entry(&curr->bucket, rate_per_sec, now);
+            return token_bucket_consume_entry(&curr->bucket, now);
         }
         curr = curr->next;
     }
@@ -126,7 +126,7 @@ int ip_ratelimit_check(IPRateLimiter *limiter, const struct sockaddr_storage *cl
     limiter->table[idx] = entry;
     limiter->total_entries++;
 
-    return token_bucket_consume_entry(&entry->bucket, rate_per_sec, now);
+    return token_bucket_consume_entry(&entry->bucket, now);
 }
 
 void ip_ratelimit_sweep_idle(IPRateLimiter *limiter, time_t now) {

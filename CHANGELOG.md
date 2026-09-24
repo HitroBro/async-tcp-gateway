@@ -1,3 +1,21 @@
+## [0.2.0] - 2026-09-24
+
+### Added
+- **Dynamic IOBuffer Allocation:** Connection ring buffers are now allocated dynamically based on `io_buffer_size` in `gateway.conf`.
+- **Dual-Stack IPv6 Backend Parsing:** Support bracketed IPv6 notation (`[::1]:9001`, `[2001:db8::1]:8080`) in configuration with validation.
+- **Scalable Per-IP Rate Limiting:** High-performance hash table token bucket with dual-stack IPv4/IPv6 support and automatic TTL idle entry eviction.
+- **TCP Half-Close (`shutdown(2)`) Support:** Full support for unidirectional stream closure with deferred response buffer flushing and `SHUT_WR` propagation.
+- **Unit Test Suite:** Standalone C unit tests covering ring buffer boundaries, configuration options, failover state machine, and rate limiter.
+- **Sanitizer Build Profiles:** Added `make asan`, `make ubsan`, and unified `make test` targets.
+
+### Fixed
+- **Ring Buffer Boundary Wrap Bug:** Reserved guard byte on `head == 0` in `buf_contiguous_write` to prevent full buffers from masquerading as empty.
+- **Idle Sweep Timeout Configuration:** Synchronized `conn_context_sweep_idle` to use `connection_idle_timeout_secs` from `GatewayConfig`.
+- **Failover Preemption on Async Connect:** Handled `CONN_STATE_CONNECTING` before generic `EPOLLERR`/`EPOLLHUP` traps to ensure non-blocking connect failures trigger failover retry loop without dropping client sockets.
+- **Reverse Epoll Interest Loss:** Fixed epoll interest updates during buffer drain to accurately reflect reverse stream direction.
+
+---
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
