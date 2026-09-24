@@ -44,7 +44,18 @@ test_ratelimit: src/ratelimit.o src/logger.o tests/test_ratelimit.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_ratelimit tests/test_ratelimit.c src/ratelimit.o src/logger.o
 	./$(BIN_DIR)/test_ratelimit
 
+# Unified Test Target
+test: test_buffer test_config test_failover test_ratelimit
+	@echo "All unit tests passed successfully."
+
+# Sanitizer Builds
+asan: CFLAGS += -fsanitize=address,undefined -fno-omit-frame-pointer
+asan: clean all test
+
+ubsan: CFLAGS += -fsanitize=undefined
+ubsan: clean all test
+
 clean:
 	rm -f $(SRC_DIR)/*.o $(TARGET)
 
-.PHONY: all clean test_buffer test_config test_failover test_ratelimit
+.PHONY: all clean test test_buffer test_config test_failover test_ratelimit asan ubsan
