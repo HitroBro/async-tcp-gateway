@@ -65,6 +65,7 @@ const BackendServer *router_select_backend_least_conn(const Route *route) {
     return selected;
 }
 
+// Round-robin backend selection algorithm
 const BackendServer *router_select_backend_round_robin(const Route *route) {
     if (!route || route->backend_count == 0) {
         LOG_ERROR("Routing failure: Route contains zero configured backends.");
