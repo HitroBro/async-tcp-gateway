@@ -1,3 +1,16 @@
+## [0.2.1] - 2026-09-25
+
+### Added
+- Implemented `least_conn` load balancing strategy selecting healthy backends with minimum active connections.
+- Added fair atomic tie-breaking when multiple backends share the lowest active connection count.
+- Added global and per-route `strategy` configuration parsing in `gateway.conf`.
+- Added unit test suite `tests/test_router.c` and `tests/test_gateway.c`.
+- Added `bin/test_router` and `bin/test_gateway` to `Makefile` test and sanitizer suites.
+
+### Performance
+- Implemented $\mathcal{O}(1)$ active connection context swap-and-pop removal in `gateway.c`.
+- Fixed active connection accounting per backend across asynchronous connection lifecycle.
+
 ## [0.2.0] - 2026-09-24
 
 ### Added
