@@ -22,6 +22,12 @@
 #define HARD_MAX_BACKENDS MAX_BACKENDS
 #define HARD_MAX_ACTIVE_CONNECTIONS 65536  // Practical limit for dynamic allocation
 
+// Load balancing routing strategies
+typedef enum {
+    STRATEGY_ROUND_ROBIN = 0,
+    STRATEGY_LEAST_CONN = 1
+} RoutingStrategy;
+
 // Represents a single destination backend server
 typedef struct {
     char ip[INET6_ADDRSTRLEN];
