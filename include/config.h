@@ -45,6 +45,7 @@ typedef struct {
     int backend_count;
     _Atomic int current_backend_idx;  // Atomic for thread-safe round-robin (C11)
     int max_consecutive_failures;  // Per-route failure threshold (falls back to global)
+    RoutingStrategy strategy;      // Route load-balancing strategy
 } Route;
 
 // M3: Simple token bucket for rate limiting
@@ -71,6 +72,7 @@ typedef struct {
     // M3: Rate limiting configuration
     int max_connections_per_sec;
     int max_connections_per_ip_per_sec;
+    RoutingStrategy default_strategy;  // Global default routing strategy
 } GatewayConfig;
 
 int config_load(const char *filepath, GatewayConfig *config);
