@@ -139,11 +139,31 @@ void conn_context_destroy(int epoll_fd, ConnectionContext *ctx) {
     LOG_INFO("Tearing down asynchronous proxy bridge. Cleaning up resources.");
     ctx->state = CONN_STATE_CLOSING;
 
-    // Remove from active_connections array
-    for (int i = 0; i < active_count; i++) {
-        if (active_connections[i] == ctx) {
-            active_connections[i] = active_connections[--active_count];
-            break;
+    // O(1) removal using tracked active_index
+    if (ctx->active_index >= 0 && ctx->active_index < active_count && active_connections[ctx->active_index] == ctx) {
+        int idx = ctx->active_index;
+        active_count--;
+        if (idx < active_count) {
+            ConnectionContext *tail = active_connections[active_count];
+            active_connections[idx] = tail;
+            tail->active_index = idx;
+        }
+        active_connections[active_count] = NULL;
+        ctx->active_index = -1;
+    } else {
+        // Fallback linear scan if active_index was desynchronized
+        for (int i = 0; i < active_count; i++) {
+            if (active_connections[i] == ctx) {
+                active_count--;
+                if (i < active_count) {
+                    ConnectionContext *tail = active_connections[active_count];
+                    active_connections[i] = tail;
+                    tail->active_index = i;
+                }
+                active_connections[active_count] = NULL;
+                ctx->active_index = -1;
+                break;
+            }
         }
     }
 
