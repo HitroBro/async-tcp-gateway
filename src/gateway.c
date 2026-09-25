@@ -105,6 +105,8 @@ ConnectionContext *conn_context_create(int client_fd, const Route *route, const 
     ctx->backend_token.role = ROLE_BACKEND;
     ctx->backend_token.parent = ctx;
 
+    ctx->active_index = -1;
+
     // C4 FIX: Use dynamic array with capacity check
     if (ensure_active_capacity(active_count + 1) < 0) {
         free(ctx);
