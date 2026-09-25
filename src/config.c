@@ -1,3 +1,4 @@
+#include <strings.h>
 #include "config.h"
 #include "logger.h"
 #include <stdio.h>
@@ -21,6 +22,21 @@ static char *trim_whitespace(char *str) {
     // Write new null terminator
     end[1] = '\0';
     return str;
+}
+
+// Internal helper: Parses routing strategy string into RoutingStrategy enum
+static __attribute__((unused)) int parse_routing_strategy(const char *str, RoutingStrategy *out_strategy) {
+    if (!str || !out_strategy) return -1;
+    if (strcasecmp(str, "round_robin") == 0 || strcasecmp(str, "round-robin") == 0) {
+        *out_strategy = STRATEGY_ROUND_ROBIN;
+        return 0;
+    }
+    if (strcasecmp(str, "least_conn") == 0 || strcasecmp(str, "least-conn") == 0 ||
+        strcasecmp(str, "least_connections") == 0) {
+        *out_strategy = STRATEGY_LEAST_CONN;
+        return 0;
+    }
+    return -1;
 }
 
 // Internal helper: Safe integer parsing with strtol
