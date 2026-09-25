@@ -44,6 +44,10 @@ test_ratelimit: src/ratelimit.o src/logger.o tests/test_ratelimit.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_ratelimit tests/test_ratelimit.c src/ratelimit.o src/logger.o
 	./$(BIN_DIR)/test_ratelimit
 
+test_gateway: src/gateway.o src/logger.o tests/test_gateway.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_gateway tests/test_gateway.c src/gateway.o src/logger.o
+	./$(BIN_DIR)/test_gateway
+
 # Unified Test Target
 test: test_buffer test_config test_failover test_ratelimit
 	@echo "All unit tests passed successfully."
