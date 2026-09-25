@@ -48,8 +48,12 @@ test_gateway: src/gateway.o src/logger.o tests/test_gateway.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_gateway tests/test_gateway.c src/gateway.o src/logger.o
 	./$(BIN_DIR)/test_gateway
 
+test_router: src/router.o src/logger.o src/net.o src/gateway.o tests/test_router.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_router tests/test_router.c src/router.o src/logger.o src/net.o src/gateway.o
+	./$(BIN_DIR)/test_router
+
 # Unified Test Target
-test: test_buffer test_config test_failover test_ratelimit test_gateway
+test: test_buffer test_config test_failover test_ratelimit test_gateway test_router
 	@echo "All unit tests passed successfully."
 
 # Sanitizer Builds
@@ -62,4 +66,4 @@ ubsan: clean all test
 clean:
 	rm -f $(SRC_DIR)/*.o $(TARGET)
 
-.PHONY: all clean test test_buffer test_config test_failover test_ratelimit test_gateway asan ubsan
+.PHONY: all clean test test_buffer test_config test_failover test_ratelimit test_gateway test_router asan ubsan
