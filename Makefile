@@ -49,7 +49,7 @@ test_gateway: src/gateway.o src/logger.o tests/test_gateway.c | $(BIN_DIR)
 	./$(BIN_DIR)/test_gateway
 
 # Unified Test Target
-test: test_buffer test_config test_failover test_ratelimit
+test: test_buffer test_config test_failover test_ratelimit test_gateway
 	@echo "All unit tests passed successfully."
 
 # Sanitizer Builds
@@ -62,4 +62,4 @@ ubsan: clean all test
 clean:
 	rm -f $(SRC_DIR)/*.o $(TARGET)
 
-.PHONY: all clean test test_buffer test_config test_failover test_ratelimit asan ubsan
+.PHONY: all clean test test_buffer test_config test_failover test_ratelimit test_gateway asan ubsan
