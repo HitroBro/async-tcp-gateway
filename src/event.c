@@ -397,16 +397,21 @@ static int initiate_backend_connection(int epoll_fd, ConnectionContext *ctx) {
             return -1;
         }
 
-        // Store the target pointer in our context so we know who we are talking to if async errors occur!
+        // Store the target pointer and increment active connection count for least_conn tracking
         ctx->target_backend = (BackendServer *)target;
-        LOG_INFO("Initiating failover connection to backend %s:%d for Client FD %d",
-                 target->ip, target->port, ctx->client_fd);
+        ctx->target_backend->active_connections++;
+        LOG_INFO("Initiating connection to backend %s:%d (active conns: %d) for Client FD %d",
+                 target->ip, target->port, ctx->target_backend->active_connections, ctx->client_fd);
 
         int fd = -1;
         int ret = net_connect_async(target->ip, target->port, &fd);
         if (ret == -1) {
             LOG_WARN("Immediate connect failure to %s:%d. Triggering failover...", target->ip, target->port);
+            if (ctx->target_backend->active_connections > 0) {
+                ctx->target_backend->active_connections--;
+            }
             router_mark_backend_down(ctx->target_backend, ctx->route->max_consecutive_failures);
+            ctx->target_backend = NULL;
             if (fd >= 0) close(fd);
             ctx->backend_fd = -1;
             continue; // Loop around and instantly try the next healthy backend in the pool!
