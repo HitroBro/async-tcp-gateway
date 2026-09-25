@@ -60,8 +60,8 @@ const BackendServer *router_select_backend_least_conn(const Route *route) {
     unsigned int raw_idx = (unsigned int)atomic_fetch_add(&mutable_route->current_backend_idx, 1);
     int selected_idx = candidates[raw_idx % (unsigned int)candidate_count];
     const BackendServer *selected = &route->backends[selected_idx];
-    LOG_DEBUG("Least-Conn selected Backend #%d -> %s:%d (active conns: %d)",
-              selected_idx + 1, selected->ip, selected->port, selected->active_connections);
+    LOG_DEBUG("Least-Conn selected Backend #%d -> %s:%d (active conns: %d, candidates: %d)",
+              selected_idx + 1, selected->ip, selected->port, selected->active_connections, candidate_count);
     return selected;
 }
 
