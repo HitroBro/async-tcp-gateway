@@ -145,6 +145,7 @@ int config_load(const char *filepath, GatewayConfig *config) {
                 config->route_count++;
                 // Inherit global max_consecutive_failures by default
                 current_route->max_consecutive_failures = config->max_consecutive_failures;
+                current_route->strategy = config->default_strategy;
                 continue;
             } else if (strcmp(trimmed, "[global]") == 0) {
                 in_global_section = 1;
@@ -257,6 +258,12 @@ int config_load(const char *filepath, GatewayConfig *config) {
             } else if (strcmp(key, "max_consecutive_failures") == 0) {
                 if (parse_int(val, &current_route->max_consecutive_failures, 1, 100) != 0) {
                     LOG_WARN("Invalid max_consecutive_failures value '%s' on line %d. Using default %d.", val, line_num, MAX_CONSECUTIVE_FAILURES);
+                }
+            } else if (strcmp(key, "strategy") == 0) {
+                if (parse_routing_strategy(val, &current_route->strategy) != 0) {
+                    LOG_WARN("Invalid route strategy '%s' on line %d. Using default.", val, line_num);
+                } else {
+                    LOG_INFO("Configured route on port %d strategy: %s", current_route->frontend_port, val);
                 }
             } else {
                 LOG_WARN("Unknown configuration key '%s' on line %d.", key, line_num);
