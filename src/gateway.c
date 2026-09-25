@@ -241,7 +241,8 @@ void conn_context_sweep_idle(int epoll_fd, const GatewayConfig *config) {
                 LOG_INFO("Closing idle connection: Client FD %d, Backend FD %d (idle %ld secs, timeout %ld secs)",
                          ctx->client_fd, ctx->backend_fd, now - ctx->last_activity, (long)timeout);
                 conn_context_destroy(epoll_fd, ctx);
-                // Don't increment i, conn_context_destroy already removed this element
+                // In-place swap-and-pop placed the tail element into index i.
+                // Do not increment i; next iteration directly evaluates the new occupant at index i.
                 continue;
             }
         }
