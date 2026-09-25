@@ -19,6 +19,53 @@ const BackendServer *router_select_backend(const Route *route) {
         LOG_ERROR("Routing failure: Route contains zero configured backends.");
         return NULL;
     }
+    if (route->strategy == STRATEGY_LEAST_CONN) {
+        return router_select_backend_least_conn(route);
+    }
+    return router_select_backend_round_robin(route);
+}
+
+const BackendServer *router_select_backend_least_conn(const Route *route) {
+    if (!route || route->backend_count == 0) {
+        LOG_ERROR("Routing failure: Route contains zero configured backends.");
+        return NULL;
+    }
+
+    int min_conns = -1;
+    int candidates[MAX_BACKENDS];
+    int candidate_count = 0;
+
+    for (int i = 0; i < route->backend_count; i++) {
+        const BackendServer *candidate = &route->backends[i];
+        if (!candidate->is_alive) continue;
+
+        if (min_conns < 0 || candidate->active_connections < min_conns) {
+            min_conns = candidate->active_connections;
+            candidates[0] = i;
+            candidate_count = 1;
+        } else if (candidate->active_connections == min_conns) {
+            candidates[candidate_count++] = i;
+        }
+    }
+
+    if (candidate_count == 0) {
+        LOG_ERROR("All %d configured backends for port %d are currently DOWN!",
+                  route->backend_count, route->frontend_port);
+        return NULL;
+    }
+
+    int selected_idx = candidates[0];
+    const BackendServer *selected = &route->backends[selected_idx];
+    LOG_DEBUG("Least-Conn selected Backend #%d -> %s:%d (active conns: %d)",
+              selected_idx + 1, selected->ip, selected->port, selected->active_connections);
+    return selected;
+}
+
+const BackendServer *router_select_backend_round_robin(const Route *route) {
+    if (!route || route->backend_count == 0) {
+        LOG_ERROR("Routing failure: Route contains zero configured backends.");
+        return NULL;
+    }
 
     Route *mutable_route = (Route *)route;
 
