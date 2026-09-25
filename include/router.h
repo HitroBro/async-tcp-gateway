@@ -4,9 +4,14 @@
 #include "config.h"
 #include "gateway.h"
 
-// Selects the next healthy target backend using atomic Round-Robin.
-// Skips servers where is_alive == 0. Returns NULL if all servers are DOWN.
+// Selects the next healthy target backend according to the configured routing strategy.
 const BackendServer *router_select_backend(const Route *route);
+
+// Round-Robin backend selection
+const BackendServer *router_select_backend_round_robin(const Route *route);
+
+// Least-Connections backend selection (selects alive backend with minimum active_connections)
+const BackendServer *router_select_backend_least_conn(const Route *route);
 
 // Records a connection failure against a backend. If consecutive failures
 // reach the threshold, marks the server as DOWN (is_alive = 0).
