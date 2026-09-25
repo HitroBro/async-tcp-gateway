@@ -113,6 +113,7 @@ int config_load(const char *filepath, GatewayConfig *config) {
     config->io_buffer_size = IO_BUFFER_SIZE;
     config->max_consecutive_failures = MAX_CONSECUTIVE_FAILURES;
     config->connection_idle_timeout_secs = CONNECTION_IDLE_TIMEOUT_SECS;
+    config->default_strategy = STRATEGY_ROUND_ROBIN;
     // M3: Rate limiting defaults
     config->max_connections_per_sec = DEFAULT_MAX_CONNECTIONS_PER_SEC;
     config->max_connections_per_ip_per_sec = DEFAULT_MAX_CONNECTIONS_PER_IP_PER_SEC;
@@ -210,6 +211,12 @@ int config_load(const char *filepath, GatewayConfig *config) {
                     } else if (strcmp(key, "max_connections_per_ip_per_sec") == 0) {
                         if (parse_int(val, &config->max_connections_per_ip_per_sec, 1, 10000) != 0) {
                             LOG_WARN("Invalid max_connections_per_ip_per_sec value '%s' on line %d. Using default %d.", val, line_num, DEFAULT_MAX_CONNECTIONS_PER_IP_PER_SEC);
+                        }
+                    } else if (strcmp(key, "strategy") == 0) {
+                        if (parse_routing_strategy(val, &config->default_strategy) != 0) {
+                            LOG_WARN("Invalid global strategy '%s' on line %d. Defaulting to round_robin.", val, line_num);
+                        } else {
+                            LOG_INFO("Configured global default routing strategy: %s", val);
                         }
                     } else {
                         LOG_WARN("Unknown global configuration key '%s' on line %d.", key, line_num);
