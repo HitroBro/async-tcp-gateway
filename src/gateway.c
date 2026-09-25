@@ -113,6 +113,7 @@ ConnectionContext *conn_context_create(int client_fd, const Route *route, const 
         return NULL;
     }
     if (active_count < config->max_active_connections) {
+        ctx->active_index = active_count;
         active_connections[active_count++] = ctx;
         
         // L7: Track active connections per backend
