@@ -14,6 +14,7 @@ int main(void) {
 
     const char *cfg_data =
         "[global]\n"
+        "strategy = round_robin\n"
         "max_routes = 5\n"
         "max_backends = 4\n"
         "max_active_connections = 512\n"
@@ -41,6 +42,8 @@ int main(void) {
     assert(config.route_count == 1);
     assert(config.io_buffer_size == 16384);
     assert(config.connection_idle_timeout_secs == 45);
+    assert(config.default_strategy == STRATEGY_ROUND_ROBIN);
+    assert(config.routes[0].strategy == STRATEGY_ROUND_ROBIN);
     assert(config.max_routes == 5);
     assert(config.max_backends == 4);
     assert(config.max_active_connections == 512);
