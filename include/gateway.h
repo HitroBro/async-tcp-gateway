@@ -159,6 +159,8 @@ struct ConnectionContext {
     int backend_read_closed;  // Backend sent FIN (EOF on recv)
     int client_write_closed;  // shutdown(client_fd, SHUT_WR) sent
     int backend_write_closed; // shutdown(backend_fd, SHUT_WR) sent
+
+    int active_index;         // O(1) position index inside active_connections array
 };
 
 static inline int conn_is_half_closed(const ConnectionContext *ctx) {
