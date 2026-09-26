@@ -36,6 +36,9 @@ typedef struct {
     int active_connections;
     int consecutive_failures;
     int probe_fd;
+    int weight;            // Configured server weight (default: 1)
+    int current_weight;    // Dynamic current weight for smooth WRR
+    int effective_weight;  // Effective weight adjusted on errors
 } BackendServer;
 
 // Represents a routing rule from a frontend port to one or more backends
