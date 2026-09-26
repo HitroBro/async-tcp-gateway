@@ -72,6 +72,29 @@ int main(void) {
     assert(rr1 != NULL && rr2 != NULL && rr3 != NULL);
     printf("[PASS] Round-robin strategy functioning correctly.\n");
 
+    // Test 6: Smooth Weighted Round Robin
+    route.strategy = STRATEGY_WEIGHTED_ROUND_ROBIN;
+    route.backends[0].weight = 3;
+    route.backends[0].effective_weight = 3;
+    route.backends[0].current_weight = 0;
+    route.backends[1].weight = 1;
+    route.backends[1].effective_weight = 1;
+    route.backends[1].current_weight = 0;
+    route.backends[2].weight = 1;
+    route.backends[2].effective_weight = 1;
+    route.backends[2].current_weight = 0;
+
+    int counts[3] = {0, 0, 0};
+    for (int i = 0; i < 5; i++) {
+        const BackendServer *s = router_select_backend(&route);
+        assert(s != NULL);
+        if (s->port == 9001) counts[0]++;
+        else if (s->port == 9002) counts[1]++;
+        else if (s->port == 9003) counts[2]++;
+    }
+    assert(counts[0] == 3 && counts[1] == 1 && counts[2] == 1);
+    printf("[PASS] Smooth WRR distributed 5 requests in exact 3:1:1 ratio.\n");
+
     printf("[PASS] test_router passed all test cases successfully.\n");
     return 0;
 }
