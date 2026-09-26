@@ -36,6 +36,11 @@ static __attribute__((unused)) int parse_routing_strategy(const char *str, Routi
         *out_strategy = STRATEGY_LEAST_CONN;
         return 0;
     }
+    if (strcasecmp(str, "weighted_round_robin") == 0 || strcasecmp(str, "weighted-round-robin") == 0 ||
+        strcasecmp(str, "wrr") == 0) {
+        *out_strategy = STRATEGY_WEIGHTED_ROUND_ROBIN;
+        return 0;
+    }
     return -1;
 }
 
