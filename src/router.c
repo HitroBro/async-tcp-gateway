@@ -14,6 +14,37 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+// Smooth Weighted Round-Robin (Nginx-style)
+const BackendServer *router_select_backend_wrr(const Route *route) {
+    if (!route || route->backend_count == 0) return NULL;
+    Route *mutable_route = (Route *)route;
+
+    int total_weight = 0;
+    BackendServer *best = NULL;
+
+    for (int i = 0; i < route->backend_count; i++) {
+        BackendServer *s = &mutable_route->backends[i];
+        if (!s->is_alive) continue;
+
+        s->current_weight += s->effective_weight;
+        total_weight += s->effective_weight;
+
+        if (best == NULL || s->current_weight > best->current_weight) {
+            best = s;
+        }
+    }
+
+    if (!best || total_weight <= 0) {
+        LOG_ERROR("All backends for port %d are DOWN or have zero weight!", route->frontend_port);
+        return NULL;
+    }
+
+    best->current_weight -= total_weight;
+    LOG_DEBUG("WRR selected Backend -> %s:%d (current weight: %d, total: %d)",
+              best->ip, best->port, best->current_weight, total_weight);
+    return best;
+}
+
 const BackendServer *router_select_backend(const Route *route) {
     if (!route || route->backend_count == 0) {
         LOG_ERROR("Routing failure: Route contains zero configured backends.");
