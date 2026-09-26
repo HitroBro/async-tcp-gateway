@@ -26,7 +26,10 @@ const BackendServer *router_select_backend_wrr(const Route *route) {
         BackendServer *s = &mutable_route->backends[i];
         if (!s->is_alive) continue;
 
-        s->current_weight += s->effective_weight;
+        // Guard against overflow during weight accumulation
+        if (s->current_weight < 1000000) {
+            s->current_weight += s->effective_weight;
+        }
         total_weight += s->effective_weight;
 
         if (best == NULL || s->current_weight > best->current_weight) {
