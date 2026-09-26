@@ -10,6 +10,9 @@ const BackendServer *router_select_backend(const Route *route);
 // Round-Robin backend selection
 const BackendServer *router_select_backend_round_robin(const Route *route);
 
+// Smooth Weighted Round-Robin backend selection
+const BackendServer *router_select_backend_wrr(const Route *route);
+
 // Least-Connections backend selection (selects alive backend with minimum active_connections)
 const BackendServer *router_select_backend_least_conn(const Route *route);
 
