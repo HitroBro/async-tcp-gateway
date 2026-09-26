@@ -54,6 +54,7 @@ int main(void) {
     assert(config.routes[0].backend_count == 3);
     assert(strcmp(config.routes[0].backends[0].ip, "127.0.0.1") == 0);
     assert(config.routes[0].backends[0].port == 9001);
+    assert(config.routes[0].backends[0].weight == 1);
     assert(strcmp(config.routes[0].backends[1].ip, "::1") == 0);
     assert(config.routes[0].backends[1].port == 9002);
     assert(strcmp(config.routes[0].backends[2].ip, "2001:db8::1") == 0);
