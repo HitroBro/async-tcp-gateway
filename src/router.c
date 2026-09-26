@@ -137,6 +137,9 @@ void router_mark_backend_down(BackendServer *backend, int max_consecutive_failur
     if (!backend || !backend->is_alive) return;
 
     backend->consecutive_failures++;
+    if (backend->effective_weight > 1) {
+        backend->effective_weight--;
+    }
     LOG_WARN("Connection failure recorded for Backend %s:%d (Consecutive failures: %d)",
              backend->ip, backend->port, backend->consecutive_failures);
     metrics_increment_backend_failures();
@@ -158,6 +161,7 @@ void router_report_backend_success(BackendServer *backend) {
     }
     
     backend->consecutive_failures = 0;
+    backend->effective_weight = (backend->weight > 0) ? backend->weight : 1;
     backend->is_alive = 1;
 }
 
