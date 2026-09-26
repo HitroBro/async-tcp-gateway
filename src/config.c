@@ -96,6 +96,27 @@ static int parse_backend_endpoint(const char *str, char *out_ip, size_t ip_len, 
     return parse_int(colon + 1, out_port, 1, 65535);
 }
 
+// Parses backend address with optional weight=N suffix (e.g., 127.0.0.1:9001 weight=3)
+static __attribute__((unused)) int parse_backend_endpoint_weighted(const char *str, char *out_ip, size_t ip_len, int *out_port, int *out_weight) {
+    if (out_weight) *out_weight = 1; // Default weight
+    char buf[MAX_LINE_LEN];
+    strncpy(buf, str, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    char *weight_token = strstr(buf, "weight=");
+    if (weight_token) {
+        int w = 1;
+        if (parse_int(weight_token + 7, &w, 1, 1000) == 0 && out_weight) {
+            *out_weight = w;
+        }
+        *weight_token = '\0';
+        while (weight_token > buf && isspace((unsigned char)*(weight_token - 1))) {
+            *(--weight_token) = '\0';
+        }
+    }
+    return parse_backend_endpoint(buf, out_ip, ip_len, out_port);
+}
+
 int config_load(const char *filepath, GatewayConfig *config) {
     FILE *file = fopen(filepath, "r");
     if (!file) {
