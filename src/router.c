@@ -53,6 +53,9 @@ const BackendServer *router_select_backend(const Route *route) {
     if (route->strategy == STRATEGY_LEAST_CONN) {
         return router_select_backend_least_conn(route);
     }
+    if (route->strategy == STRATEGY_WEIGHTED_ROUND_ROBIN) {
+        return router_select_backend_wrr(route);
+    }
     return router_select_backend_round_robin(route);
 }
 
