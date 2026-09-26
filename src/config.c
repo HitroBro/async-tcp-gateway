@@ -265,13 +265,17 @@ int config_load(const char *filepath, GatewayConfig *config) {
 
                 BackendServer *backend = &current_route->backends[current_route->backend_count];
                 
-                int parsed = parse_backend_endpoint(val, backend->ip, sizeof(backend->ip), &backend->port);
+                int weight = 1;
+                int parsed = parse_backend_endpoint_weighted(val, backend->ip, sizeof(backend->ip), &backend->port, &weight);
                 if (parsed == 0) {
-                    LOG_DEBUG("Parsed backend target: %s:%d", backend->ip, backend->port);
+                    LOG_DEBUG("Parsed backend target: %s:%d (weight: %d)", backend->ip, backend->port, weight);
                     backend->is_alive = 1;
+                    backend->weight = weight;
+                    backend->current_weight = 0;
+                    backend->effective_weight = weight;
                     backend->active_connections = 0;
                     backend->consecutive_failures = 0;
-                    backend->probe_fd = -1; // -1 indicates NO active health check socket
+                    backend->probe_fd = -1;
                     current_route->backend_count++;
                 } else {
                     LOG_ERROR("Malformed backend target on line %d: %s (Expected format [IPv6]:PORT or IP:PORT)", line_num, val);
