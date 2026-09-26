@@ -25,7 +25,8 @@
 // Load balancing routing strategies
 typedef enum {
     STRATEGY_ROUND_ROBIN = 0,
-    STRATEGY_LEAST_CONN = 1
+    STRATEGY_LEAST_CONN = 1,
+    STRATEGY_WEIGHTED_ROUND_ROBIN = 2
 } RoutingStrategy;
 
 // Represents a single destination backend server
