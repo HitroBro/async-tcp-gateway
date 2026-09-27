@@ -175,10 +175,11 @@ int event_loop_run(const GatewayConfig *config) {
         return -1;
     }
 
+    int interval = (config && config->probe_interval_secs > 0) ? config->probe_interval_secs : 5;
     struct itimerspec ts;
-    ts.it_interval.tv_sec = 5;
+    ts.it_interval.tv_sec = interval;
     ts.it_interval.tv_nsec = 0;
-    ts.it_value.tv_sec = 5;
+    ts.it_value.tv_sec = interval;
     ts.it_value.tv_nsec = 0;
     if (timerfd_settime(timer_fd, 0, &ts, NULL) < 0) {
         LOG_ERROR("Fatal: timerfd_settime failed: %s", strerror(errno));
