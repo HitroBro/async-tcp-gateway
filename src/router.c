@@ -147,8 +147,10 @@ void router_mark_backend_down(BackendServer *backend, int max_consecutive_failur
              backend->ip, backend->port, backend->consecutive_failures);
     metrics_increment_backend_failures();
 
+    backend->consecutive_successes = 0;
     if (backend->consecutive_failures >= max_consecutive_failures) {
-        backend->is_alive = 0; // Evict from active Round-Robin rotation
+        backend->is_alive = 0;
+        backend->health_state = HEALTH_STATE_DOWN;
         LOG_ERROR("Backend %s:%d exceeded failure threshold (%d/%d)! Marked DOWN.",
                   backend->ip, backend->port, backend->consecutive_failures, max_consecutive_failures);
     }
