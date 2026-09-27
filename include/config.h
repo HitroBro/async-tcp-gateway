@@ -24,6 +24,12 @@
 
 // Load balancing routing strategies
 typedef enum {
+    HEALTH_STATE_UP = 0,
+    HEALTH_STATE_DOWN = 1,
+    HEALTH_STATE_PROBING = 2
+} BackendHealthState;
+
+typedef enum {
     STRATEGY_ROUND_ROBIN = 0,
     STRATEGY_LEAST_CONN = 1,
     STRATEGY_WEIGHTED_ROUND_ROBIN = 2
