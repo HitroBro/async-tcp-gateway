@@ -46,6 +46,8 @@ typedef struct {
     int weight;            // Configured server weight (default: 1)
     int current_weight;    // Dynamic current weight for smooth WRR
     int effective_weight;  // Effective weight adjusted on errors
+    BackendHealthState health_state; // Tri-state health tracker (UP, DOWN, PROBING)
+    int consecutive_successes;       // Consecutive successes recorded for flap damping
 } BackendServer;
 
 // Represents a routing rule from a frontend port to one or more backends
