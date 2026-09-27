@@ -87,6 +87,7 @@ typedef struct {
     int max_connections_per_sec;
     int max_connections_per_ip_per_sec;
     RoutingStrategy default_strategy;  // Global default routing strategy
+    int probe_interval_secs;           // Health probe timer interval in seconds
 } GatewayConfig;
 
 int config_load(const char *filepath, GatewayConfig *config);
