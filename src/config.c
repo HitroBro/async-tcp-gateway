@@ -246,7 +246,15 @@ int config_load(const char *filepath, GatewayConfig *config) {
                         if (parse_int(val, &config->probe_interval_secs, 1, 3600) != 0) {
                             LOG_WARN("Invalid probe_interval_secs on line %d. Using default 5.", line_num);
                         }
-                    } else if (strcmp(key, "strategy") == 0) {
+                    } else if (strcmp(key, "rise_count") == 0) {
+                if (parse_int(val, &current_route->rise_count, 1, 100) != 0) {
+                    LOG_WARN("Invalid rise_count on line %d.", line_num);
+                }
+            } else if (strcmp(key, "fall_count") == 0) {
+                if (parse_int(val, &current_route->fall_count, 1, 100) != 0) {
+                    LOG_WARN("Invalid fall_count on line %d.", line_num);
+                }
+            } else if (strcmp(key, "strategy") == 0) {
                         if (parse_routing_strategy(val, &config->default_strategy) != 0) {
                             LOG_WARN("Invalid global strategy '%s' on line %d. Defaulting to round_robin.", val, line_num);
                         } else {
