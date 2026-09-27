@@ -138,6 +138,10 @@ python3 tests/mock_backend.py -p 9003 &  # Start after gateway
 
 ---
 
+### Health Checking & Flap Damping
+
+The gateway maintains a tri-state health tracker (`HEALTH_STATE_UP`, `HEALTH_STATE_DOWN`, `HEALTH_STATE_PROBING`) for each upstream server. Configurable `rise_count` and `fall_count` prevent unstable nodes from rapidly oscillating in and out of rotation.
+
 ## ⚙️ Configuration
 
 Create a config file (e.g., `config/gateway.conf`):
