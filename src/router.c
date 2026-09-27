@@ -161,7 +161,7 @@ void router_report_backend_success(BackendServer *backend) {
 
     // If it was previously struggling or marked down, celebrate the recovery!
     if (backend->consecutive_failures > 0 || !backend->is_alive) {
-        LOG_INFO("Backend %s:%d responded successfully! Restoring to ALIVE status.",
+        LOG_INFO("Health check: Backend %s:%d responded successfully! Restoring ALIVE status.",
                  backend->ip, backend->port);
     }
     
