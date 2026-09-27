@@ -44,6 +44,8 @@ int main(void) {
     assert(config.connection_idle_timeout_secs == 45);
     assert(config.default_strategy == STRATEGY_ROUND_ROBIN);
     assert(config.routes[0].strategy == STRATEGY_ROUND_ROBIN);
+    assert(config.probe_interval_secs == 5);
+    assert(config.routes[0].rise_count == 2);
     assert(config.max_routes == 5);
     assert(config.max_backends == 4);
     assert(config.max_active_connections == 512);
