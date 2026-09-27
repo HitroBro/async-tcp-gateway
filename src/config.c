@@ -140,6 +140,7 @@ int config_load(const char *filepath, GatewayConfig *config) {
     config->max_consecutive_failures = MAX_CONSECUTIVE_FAILURES;
     config->connection_idle_timeout_secs = CONNECTION_IDLE_TIMEOUT_SECS;
     config->default_strategy = STRATEGY_ROUND_ROBIN;
+    config->probe_interval_secs = 5;
     // M3: Rate limiting defaults
     config->max_connections_per_sec = DEFAULT_MAX_CONNECTIONS_PER_SEC;
     config->max_connections_per_ip_per_sec = DEFAULT_MAX_CONNECTIONS_PER_IP_PER_SEC;
@@ -172,6 +173,8 @@ int config_load(const char *filepath, GatewayConfig *config) {
                 // Inherit global max_consecutive_failures by default
                 current_route->max_consecutive_failures = config->max_consecutive_failures;
                 current_route->strategy = config->default_strategy;
+                current_route->rise_count = 2; // Default 2 consecutive successes to recover
+                current_route->fall_count = config->max_consecutive_failures;
                 continue;
             } else if (strcmp(trimmed, "[global]") == 0) {
                 in_global_section = 1;
