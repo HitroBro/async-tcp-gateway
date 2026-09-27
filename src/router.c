@@ -165,9 +165,11 @@ void router_report_backend_success(BackendServer *backend) {
                  backend->ip, backend->port);
     }
     
+    backend->consecutive_successes++;
     backend->consecutive_failures = 0;
     backend->effective_weight = (backend->weight > 0) ? backend->weight : 1;
     backend->is_alive = 1;
+    backend->health_state = HEALTH_STATE_UP;
 }
 
 void router_sweep_health_probes(int epoll_fd, GatewayConfig *config) {
