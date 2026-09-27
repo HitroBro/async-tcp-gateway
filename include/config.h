@@ -58,6 +58,8 @@ typedef struct {
     _Atomic int current_backend_idx;  // Atomic for thread-safe round-robin (C11)
     int max_consecutive_failures;  // Per-route failure threshold (falls back to global)
     RoutingStrategy strategy;      // Route load-balancing strategy
+    int rise_count;                // Consecutive successes required to restore healthy status
+    int fall_count;                // Consecutive failures required to mark DOWN
 } Route;
 
 // M3: Simple token bucket for rate limiting
