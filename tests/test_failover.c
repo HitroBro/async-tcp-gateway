@@ -62,6 +62,10 @@ int main(void) {
     assert(b_recovered != NULL);
     assert(b_recovered->port == 9001);
 
+    assert(route.backends[0].is_alive == 1);
+    assert(route.backends[0].health_state == HEALTH_STATE_UP);
+    printf("[PASS] Backend health state correctly restored to HEALTH_STATE_UP.\n");
+
     printf("[PASS] test_failover unit test passed.\n");
     return 0;
 }
