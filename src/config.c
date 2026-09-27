@@ -242,6 +242,10 @@ int config_load(const char *filepath, GatewayConfig *config) {
                         if (parse_int(val, &config->max_connections_per_ip_per_sec, 1, 10000) != 0) {
                             LOG_WARN("Invalid max_connections_per_ip_per_sec value '%s' on line %d. Using default %d.", val, line_num, DEFAULT_MAX_CONNECTIONS_PER_IP_PER_SEC);
                         }
+                    } else if (strcmp(key, "probe_interval_secs") == 0) {
+                        if (parse_int(val, &config->probe_interval_secs, 1, 3600) != 0) {
+                            LOG_WARN("Invalid probe_interval_secs on line %d. Using default 5.", line_num);
+                        }
                     } else if (strcmp(key, "strategy") == 0) {
                         if (parse_routing_strategy(val, &config->default_strategy) != 0) {
                             LOG_WARN("Invalid global strategy '%s' on line %d. Defaulting to round_robin.", val, line_num);
