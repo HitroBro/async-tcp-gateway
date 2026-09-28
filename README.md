@@ -142,6 +142,10 @@ python3 tests/mock_backend.py -p 9003 &  # Start after gateway
 
 The gateway maintains a tri-state health tracker (`HEALTH_STATE_UP`, `HEALTH_STATE_DOWN`, `HEALTH_STATE_PROBING`) for each upstream server. Configurable `rise_count` and `fall_count` prevent unstable nodes from rapidly oscillating in and out of rotation.
 
+### Kernel & Socket Tuning
+
+On startup, the gateway queries `getrlimit(RLIMIT_NOFILE)` and auto-elevates process file descriptor limits to prevent descriptor exhaustion under heavy connection bursts. Socket send/receive buffer sizes can also be configured via `socket_sndbuf_size` and `socket_rcvbuf_size`.
+
 ## ⚙️ Configuration
 
 Create a config file (e.g., `config/gateway.conf`):
