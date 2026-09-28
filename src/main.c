@@ -36,6 +36,9 @@ int main(int argc, char *argv[]) {
 
     LOG_INFO("Starting 404_Team_not_Found High-Concurrency Layer 4 Traffic Gateway...");
 
+    // Auto-tune process file descriptor limits for high concurrency
+    net_tune_rlimit_nofile(4096);
+
     // 1. Load routing configuration
     GatewayConfig config;
     if (config_load(config_path, &config) < 0) {
