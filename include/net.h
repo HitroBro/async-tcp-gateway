@@ -47,4 +47,7 @@ int net_set_keepalive(int sockfd, int idle_secs, int interval_secs, int max_prob
 // Elevates process file descriptor limits (RLIMIT_NOFILE) to support high connection counts
 int net_tune_rlimit_nofile(int target_nofile);
 
+// Sets SO_SNDBUF and SO_RCVBUF socket buffer sizes
+int net_set_buffer_sizes(int fd, int sndbuf, int rcvbuf);
+
 #endif // NET_H
