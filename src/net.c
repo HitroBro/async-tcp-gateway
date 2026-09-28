@@ -320,3 +320,18 @@ int net_tune_rlimit_nofile(int target_nofile) {
     }
     return 0;
 }
+
+int net_set_buffer_sizes(int fd, int sndbuf, int rcvbuf) {
+    if (fd < 0) return -1;
+    if (sndbuf > 0) {
+        if (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf)) < 0) {
+            LOG_DEBUG("setsockopt SO_SNDBUF failed on FD %d: %s", fd, strerror(errno));
+        }
+    }
+    if (rcvbuf > 0) {
+        if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf)) < 0) {
+            LOG_DEBUG("setsockopt SO_RCVBUF failed on FD %d: %s", fd, strerror(errno));
+        }
+    }
+    return 0;
+}
