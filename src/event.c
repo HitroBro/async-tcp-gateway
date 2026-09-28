@@ -360,7 +360,10 @@ static void handle_listener_event(int epoll_fd, EndpointToken *token, const Gate
 
         // H3: Apply TCP_NODELAY and SO_KEEPALIVE for low latency and dead connection detection
         net_set_tcp_nodelay(client_fd, 1);
-        net_set_keepalive(client_fd, 30, 10, 3);  // Idle 30s, probe every 10s, 3 probes
+        net_set_keepalive(client_fd, 30, 10, 3);
+        if (config->socket_sndbuf_size > 0 || config->socket_rcvbuf_size > 0) {
+            net_set_buffer_sizes(client_fd, config->socket_sndbuf_size, config->socket_rcvbuf_size);
+        }
 
         // Use the route this listener is bound to
         ConnectionContext *ctx = conn_context_create(client_fd, route, config);
