@@ -294,3 +294,29 @@ int net_set_keepalive(int sockfd, int idle_secs, int interval_secs, int max_prob
 
     return 0;
 }
+#include <sys/resource.h>
+
+int net_tune_rlimit_nofile(int target_nofile) {
+    if (target_nofile <= 0) return 0;
+
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_NOFILE, &rl) < 0) {
+        LOG_WARN("Failed to query RLIMIT_NOFILE: %s", strerror(errno));
+        return -1;
+    }
+
+    if ((rlim_t)target_nofile > rl.rlim_cur) {
+        rlim_t prev = rl.rlim_cur;
+        rl.rlim_cur = (rlim_t)target_nofile;
+        if (rl.rlim_cur > rl.rlim_max) {
+            rl.rlim_cur = rl.rlim_max;
+        }
+        if (setrlimit(RLIMIT_NOFILE, &rl) < 0) {
+            LOG_WARN("Could not elevate RLIMIT_NOFILE to %d: %s (current limit: %lu)",
+                     target_nofile, strerror(errno), (unsigned long)prev);
+            return -1;
+        }
+        LOG_INFO("Elevated RLIMIT_NOFILE from %lu to %lu", (unsigned long)prev, (unsigned long)rl.rlim_cur);
+    }
+    return 0;
+}
