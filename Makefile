@@ -6,7 +6,7 @@ CFLAGS = -Wall -Wextra -pedantic -std=c11 -g -I./include
 SRC_DIR = src
 BIN_DIR = bin
 
-# Source and Object Files
+# Source and Object Files (includes slab pool bufpool.c)
 SRCS = $(wildcard $(SRC_DIR)/*.c)
 OBJS = $(SRCS:.c=.o)
 
