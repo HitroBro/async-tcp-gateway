@@ -23,6 +23,7 @@ int bufpool_init(BufferPool *pool, size_t chunk_size, size_t capacity) {
 void *bufpool_acquire(BufferPool *pool) {
     if (!pool || !pool->free_list) return NULL;
     BufferChunk *chunk = pool->free_list;
+    // Pop head chunk from free-list
     pool->free_list = chunk->next;
     pool->available--;
     return (void *)chunk;
