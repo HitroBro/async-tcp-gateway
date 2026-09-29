@@ -56,8 +56,12 @@ test_net: src/net.o src/logger.o tests/test_net.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_net tests/test_net.c src/net.o src/logger.o
 	./$(BIN_DIR)/test_net
 
+test_bufpool: src/bufpool.o tests/test_bufpool.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_bufpool tests/test_bufpool.c src/bufpool.o
+	./$(BIN_DIR)/test_bufpool
+
 # Unified Test Target
-test: test_buffer test_config test_failover test_ratelimit test_gateway test_router test_net
+test: test_buffer test_config test_failover test_ratelimit test_gateway test_router test_net test_bufpool
 	@echo "All unit tests passed successfully."
 
 # Sanitizer Builds
