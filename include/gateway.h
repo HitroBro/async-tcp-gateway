@@ -2,6 +2,7 @@
 #define GATEWAY_H
 
 #include "config.h"
+#include "bufpool.h"
 #include <sys/types.h>
 #include <stdlib.h>
 
