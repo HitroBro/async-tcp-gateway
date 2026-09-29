@@ -146,6 +146,10 @@ The gateway maintains a tri-state health tracker (`HEALTH_STATE_UP`, `HEALTH_STA
 
 On startup, the gateway queries `getrlimit(RLIMIT_NOFILE)` and auto-elevates process file descriptor limits to prevent descriptor exhaustion under heavy connection bursts. Socket send/receive buffer sizes can also be configured via `socket_sndbuf_size` and `socket_rcvbuf_size`.
 
+### Memory Buffer Slab Allocator
+
+A lock-free freelist slab allocator (`bufpool`) pre-allocates uniform memory chunks for connection byte streams, eliminating `glibc` `ptmalloc` fragmentation during intense connection spikes.
+
 ## ⚙️ Configuration
 
 Create a config file (e.g., `config/gateway.conf`):
