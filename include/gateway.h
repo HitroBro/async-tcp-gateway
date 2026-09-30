@@ -188,6 +188,9 @@ void conn_context_sweep_idle(int epoll_fd, const GatewayConfig *config);  // Clo
 
 // Metrics functions
 void metrics_dump(const GatewayConfig *config);
+
+// Formats gateway metrics in standard Prometheus exposition text format
+size_t metrics_format_prometheus(const GatewayConfig *config, char *out_buf, size_t max_len);
 void metrics_increment_connections(void);
 void metrics_decrement_connections(void);
 void metrics_increment_failed(void);
