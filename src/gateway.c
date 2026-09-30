@@ -288,7 +288,7 @@ size_t metrics_format_prometheus(const GatewayConfig *config, char *out_buf, siz
     if (!out_buf || max_len == 0) return 0;
     (void)config;
 
-    return (size_t)snprintf(out_buf, max_len,
+    int written = snprintf(out_buf, max_len,
         "# HELP gateway_total_connections_total Total connections accepted\n"
         "# TYPE gateway_total_connections_total counter\n"
         "gateway_total_connections_total %lu\n"
@@ -309,6 +309,7 @@ size_t metrics_format_prometheus(const GatewayConfig *config, char *out_buf, siz
         (unsigned long)g_metrics.total_bytes_read,
         (unsigned long)g_metrics.total_bytes_written,
         (unsigned long)g_metrics.failed_connections);
+    return (written > 0 && (size_t)written < max_len) ? (size_t)written : 0;
 }
 
 void metrics_dump(const GatewayConfig *config) {
