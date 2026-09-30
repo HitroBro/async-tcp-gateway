@@ -150,6 +150,16 @@ On startup, the gateway queries `getrlimit(RLIMIT_NOFILE)` and auto-elevates pro
 
 A lock-free freelist slab allocator (`bufpool`) pre-allocates uniform memory chunks for connection byte streams, eliminating `glibc` `ptmalloc` fragmentation during intense connection spikes.
 
+### Prometheus Metrics Exporter
+
+When `metrics_port` is configured, standard Prometheus exposition format metrics can be scraped via HTTP:
+```text
+gateway_total_connections_total 14500
+gateway_active_connections 42
+gateway_bytes_read_total 10485760
+gateway_bytes_written_total 10485760
+```
+
 ## ⚙️ Configuration
 
 Create a config file (e.g., `config/gateway.conf`):
