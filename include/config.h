@@ -90,6 +90,7 @@ typedef struct {
     int probe_interval_secs;           // Health probe timer interval in seconds
     int socket_sndbuf_size;            // Optional custom SO_SNDBUF size
     int socket_rcvbuf_size;            // Optional custom SO_RCVBUF size
+    int metrics_port;                  // Prometheus metrics HTTP exporter port (0 = disabled)
 } GatewayConfig;
 
 int config_load(const char *filepath, GatewayConfig *config);
