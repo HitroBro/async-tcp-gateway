@@ -284,6 +284,29 @@ void metrics_increment_health_probe_success(void) {
     atomic_fetch_add(&g_metrics.health_probe_successes, 1);
 }
 
+size_t metrics_format_prometheus(const GatewayConfig *config, char *out_buf, size_t max_len) {
+    if (!out_buf || max_len == 0) return 0;
+    (void)config;
+
+    return (size_t)snprintf(out_buf, max_len,
+        "# HELP gateway_total_connections_total Total connections accepted\n"
+        "# TYPE gateway_total_connections_total counter\n"
+        "gateway_total_connections_total %lu\n"
+        "# HELP gateway_active_connections Current active client bridges\n"
+        "# TYPE gateway_active_connections gauge\n"
+        "gateway_active_connections %lu\n"
+        "# HELP gateway_bytes_read_total Total bytes read from all sockets\n"
+        "# TYPE gateway_bytes_read_total counter\n"
+        "gateway_bytes_read_total %lu\n"
+        "# HELP gateway_bytes_written_total Total bytes written to all sockets\n"
+        "# TYPE gateway_bytes_written_total counter\n"
+        "gateway_bytes_written_total %lu\n",
+        (unsigned long)g_metrics.total_connections,
+        (unsigned long)g_metrics.active_connections,
+        (unsigned long)g_metrics.total_bytes_read,
+        (unsigned long)g_metrics.total_bytes_written);
+}
+
 void metrics_dump(const GatewayConfig *config) {
     LOG_INFO("=== GATEWAY METRICS ===");
     LOG_INFO("Total connections accepted: %" PRIu64, g_metrics.total_connections);
