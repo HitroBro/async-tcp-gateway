@@ -300,11 +300,15 @@ size_t metrics_format_prometheus(const GatewayConfig *config, char *out_buf, siz
         "gateway_bytes_read_total %lu\n"
         "# HELP gateway_bytes_written_total Total bytes written to all sockets\n"
         "# TYPE gateway_bytes_written_total counter\n"
-        "gateway_bytes_written_total %lu\n",
+        "gateway_bytes_written_total %lu\n"
+        "# HELP gateway_failed_connections_total Failed connections\n"
+        "# TYPE gateway_failed_connections_total counter\n"
+        "gateway_failed_connections_total %lu\n",
         (unsigned long)g_metrics.total_connections,
         (unsigned long)g_metrics.active_connections,
         (unsigned long)g_metrics.total_bytes_read,
-        (unsigned long)g_metrics.total_bytes_written);
+        (unsigned long)g_metrics.total_bytes_written,
+        (unsigned long)g_metrics.failed_connections);
 }
 
 void metrics_dump(const GatewayConfig *config) {
