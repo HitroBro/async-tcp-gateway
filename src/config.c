@@ -141,6 +141,7 @@ int config_load(const char *filepath, GatewayConfig *config) {
     config->connection_idle_timeout_secs = CONNECTION_IDLE_TIMEOUT_SECS;
     config->default_strategy = STRATEGY_ROUND_ROBIN;
     config->probe_interval_secs = 5;
+    config->metrics_port = 0;
     // M3: Rate limiting defaults
     config->max_connections_per_sec = DEFAULT_MAX_CONNECTIONS_PER_SEC;
     config->max_connections_per_ip_per_sec = DEFAULT_MAX_CONNECTIONS_PER_IP_PER_SEC;
@@ -253,6 +254,10 @@ int config_load(const char *filepath, GatewayConfig *config) {
             } else if (strcmp(key, "fall_count") == 0) {
                 if (parse_int(val, &current_route->fall_count, 1, 100) != 0) {
                     LOG_WARN("Invalid fall_count on line %d.", line_num);
+                }
+            } else if (strcmp(key, "metrics_port") == 0) {
+                if (parse_int(val, &config->metrics_port, 1, 65535) != 0) {
+                    LOG_WARN("Invalid metrics_port on line %d.", line_num);
                 }
             } else if (strcmp(key, "strategy") == 0) {
                         if (parse_routing_strategy(val, &config->default_strategy) != 0) {
