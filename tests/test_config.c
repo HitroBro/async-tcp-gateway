@@ -62,6 +62,12 @@ int main(void) {
     assert(strcmp(config.routes[0].backends[2].ip, "2001:db8::1") == 0);
     assert(config.routes[0].backends[2].port == 9003);
 
+    assert(config_validate(&config) == 0);
+    GatewayConfig invalid_cfg;
+    memset(&invalid_cfg, 0, sizeof(GatewayConfig));
+    assert(config_validate(&invalid_cfg) == -1);
+    printf("[PASS] config_validate logic verified.\n");
+
     printf("[PASS] test_config passed successfully.\n");
     return 0;
 }
