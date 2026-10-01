@@ -402,3 +402,27 @@ int config_validate(const GatewayConfig *config) {
     }
     return 0;
 }
+
+int config_reload_in_place(const char *filepath, GatewayConfig *live_config) {
+    if (!filepath || !live_config) return -1;
+
+    GatewayConfig new_cfg;
+    if (config_load(filepath, &new_cfg) != 0) {
+        LOG_WARN("Config reload aborted: Error parsing %s", filepath);
+        return -1;
+    }
+    if (config_validate(&new_cfg) != 0) {
+        LOG_WARN("Config reload aborted: New configuration failed validation checks.");
+        return -1;
+    }
+
+    // In-place synchronization of rates and limits without closing client sockets
+    live_config->connection_idle_timeout_secs = new_cfg.connection_idle_timeout_secs;
+    live_config->max_consecutive_failures = new_cfg.max_consecutive_failures;
+    live_config->probe_interval_secs = new_cfg.probe_interval_secs;
+    live_config->max_connections_per_sec = new_cfg.max_connections_per_sec;
+    live_config->max_connections_per_ip_per_sec = new_cfg.max_connections_per_ip_per_sec;
+
+    LOG_INFO("Configuration dynamically reloaded in-place from %s without dropping active sessions.", filepath);
+    return 0;
+}
