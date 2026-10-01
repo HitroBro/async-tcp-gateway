@@ -264,6 +264,9 @@ int event_loop_run(const GatewayConfig *config) {
                     if (fdsi.ssi_signo == SIGUSR1) {
                         LOG_INFO("Metrics dump signal (SIGUSR1) received.");
                         metrics_dump(config);
+                    } else if (fdsi.ssi_signo == SIGHUP) {
+                        LOG_INFO("SIGHUP received. Initiating zero-downtime configuration reload...");
+                        config_reload_in_place("config/gateway.conf", (GatewayConfig *)config);
                     } else {
                         LOG_INFO("Shutdown signal (%d) received. Initiating graceful teardown...", fdsi.ssi_signo);
                         running = 0;
