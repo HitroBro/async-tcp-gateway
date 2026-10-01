@@ -160,6 +160,10 @@ gateway_bytes_read_total 10485760
 gateway_bytes_written_total 10485760
 ```
 
+### Zero-Downtime Config Reload (SIGHUP)
+
+Sending a `SIGHUP` signal (`kill -HUP <pid>`) triggers an in-place configuration reload via `signalfd`. Limits, timeouts, and backend parameters update dynamically without terminating active proxy sessions.
+
 ## ⚙️ Configuration
 
 Create a config file (e.g., `config/gateway.conf`):
