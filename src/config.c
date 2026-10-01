@@ -383,3 +383,22 @@ void config_print(const GatewayConfig *config) {
              config->max_connections_per_sec, config->max_connections_per_ip_per_sec);
     LOG_INFO("====================================");
 }
+int config_validate(const GatewayConfig *config) {
+    if (!config) return -1;
+    if (config->route_count <= 0) {
+        LOG_ERROR("Config validation failed: Zero routes configured.");
+        return -1;
+    }
+    for (int r = 0; r < config->route_count; r++) {
+        if (config->routes[r].frontend_port <= 0 || config->routes[r].frontend_port > 65535) {
+            LOG_ERROR("Config validation failed: Invalid frontend port %d on route %d",
+                      config->routes[r].frontend_port, r + 1);
+            return -1;
+        }
+        if (config->routes[r].backend_count <= 0) {
+            LOG_ERROR("Config validation failed: Route %d has zero backends", r + 1);
+            return -1;
+        }
+    }
+    return 0;
+}
