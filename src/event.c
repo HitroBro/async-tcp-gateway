@@ -150,6 +150,7 @@ int event_loop_run(const GatewayConfig *config) {
     sigaddset(&mask, SIGINT);
     sigaddset(&mask, SIGTERM);
     sigaddset(&mask, SIGUSR1);  // For metrics dump
+    sigaddset(&mask, SIGHUP);   // For zero-downtime config reload
     if (sigprocmask(SIG_BLOCK, &mask, NULL) < 0) {
         LOG_ERROR("Fatal: sigprocmask failed: %s", strerror(errno));
         // C3 FIX: Clean up listener tokens on error
