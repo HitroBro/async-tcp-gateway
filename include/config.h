@@ -95,6 +95,7 @@ typedef struct {
 
 int config_load(const char *filepath, GatewayConfig *config);
 int config_validate(const GatewayConfig *config);
+int config_reload_in_place(const char *filepath, GatewayConfig *live_config);
 void config_print(const GatewayConfig *config);
 
 #endif // CONFIG_H
