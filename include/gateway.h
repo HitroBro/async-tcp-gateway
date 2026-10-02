@@ -162,6 +162,7 @@ struct ConnectionContext {
     int backend_write_closed; // shutdown(backend_fd, SHUT_WR) sent
 
     int active_index;         // O(1) position index inside active_connections array
+    char client_ip[INET6_ADDRSTRLEN]; // Client IP address string for sticky session routing
 };
 
 static inline int conn_is_half_closed(const ConnectionContext *ctx) {
