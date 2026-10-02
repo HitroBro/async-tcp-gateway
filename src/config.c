@@ -41,6 +41,10 @@ static __attribute__((unused)) int parse_routing_strategy(const char *str, Routi
         *out_strategy = STRATEGY_WEIGHTED_ROUND_ROBIN;
         return 0;
     }
+    if (strcasecmp(str, "ip_hash") == 0 || strcasecmp(str, "ip-hash") == 0) {
+        *out_strategy = STRATEGY_IP_HASH;
+        return 0;
+    }
     return -1;
 }
 
