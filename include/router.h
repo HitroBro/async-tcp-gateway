@@ -13,6 +13,9 @@ const BackendServer *router_select_backend_round_robin(const Route *route);
 // Smooth Weighted Round-Robin backend selection
 const BackendServer *router_select_backend_wrr(const Route *route);
 
+// IP-Hash consistent session routing
+const BackendServer *router_select_backend_ip_hash(const Route *route, const char *client_ip);
+
 // Least-Connections backend selection (selects alive backend with minimum active_connections)
 const BackendServer *router_select_backend_least_conn(const Route *route);
 
