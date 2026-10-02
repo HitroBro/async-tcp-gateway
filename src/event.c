@@ -371,6 +371,9 @@ static void handle_listener_event(int epoll_fd, EndpointToken *token, const Gate
 
         // Use the route this listener is bound to
         ConnectionContext *ctx = conn_context_create(client_fd, route, config);
+        if (ctx) {
+            strncpy(ctx->client_ip, client_ip, sizeof(ctx->client_ip) - 1);
+        }
         if (!ctx) {
             close(client_fd);
             continue;
