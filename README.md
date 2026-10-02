@@ -164,6 +164,10 @@ gateway_bytes_written_total 10485760
 
 Sending a `SIGHUP` signal (`kill -HUP <pid>`) triggers an in-place configuration reload via `signalfd`. Limits, timeouts, and backend parameters update dynamically without terminating active proxy sessions.
 
+### Client IP Hash Sticky Sessions
+
+`strategy = ip_hash` hashes the client's IPv4/IPv6 source address via FNV-1a, providing deterministic backend stickiness while gracefully falling over to adjacent healthy servers if a node goes down.
+
 ## ⚙️ Configuration
 
 Create a config file (e.g., `config/gateway.conf`):
