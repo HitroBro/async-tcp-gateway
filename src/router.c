@@ -85,6 +85,9 @@ const BackendServer *router_select_backend(const Route *route) {
     if (route->strategy == STRATEGY_WEIGHTED_ROUND_ROBIN) {
         return router_select_backend_wrr(route);
     }
+    if (route->strategy == STRATEGY_IP_HASH) {
+        return router_select_backend_ip_hash(route, "127.0.0.1");
+    }
     return router_select_backend_round_robin(route);
 }
 
