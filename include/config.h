@@ -32,7 +32,8 @@ typedef enum {
 typedef enum {
     STRATEGY_ROUND_ROBIN = 0,
     STRATEGY_LEAST_CONN = 1,
-    STRATEGY_WEIGHTED_ROUND_ROBIN = 2
+    STRATEGY_WEIGHTED_ROUND_ROBIN = 2,
+    STRATEGY_IP_HASH = 3
 } RoutingStrategy;
 
 // Represents a single destination backend server
