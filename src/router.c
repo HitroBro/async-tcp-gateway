@@ -48,6 +48,32 @@ const BackendServer *router_select_backend_wrr(const Route *route) {
     return best;
 }
 
+
+const BackendServer *router_select_backend_ip_hash(const Route *route, const char *client_ip) {
+    if (!route || route->backend_count == 0) return NULL;
+    if (!client_ip || client_ip[0] == '\0') {
+        return router_select_backend_round_robin(route);
+    }
+
+    // FNV-1a 32-bit hash of client IP
+    uint32_t hash = 2166136261u;
+    for (const char *p = client_ip; *p; p++) {
+        hash ^= (uint8_t)*p;
+        hash *= 16777619u;
+    }
+
+    int start_idx = (int)(hash % (uint32_t)route->backend_count);
+    for (int i = 0; i < route->backend_count; i++) {
+        int idx = (start_idx + i) % route->backend_count;
+        const BackendServer *s = &route->backends[idx];
+        if (s->is_alive) {
+            LOG_DEBUG("IP-Hash mapped %s -> Backend #%d (%s:%d)", client_ip, idx + 1, s->ip, s->port);
+            return s;
+        }
+    }
+    LOG_ERROR("All backends DOWN for port %d!", route->frontend_port);
+    return NULL;
+}
 const BackendServer *router_select_backend(const Route *route) {
     if (!route || route->backend_count == 0) {
         LOG_ERROR("Routing failure: Route contains zero configured backends.");
