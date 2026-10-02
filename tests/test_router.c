@@ -95,6 +95,13 @@ int main(void) {
     assert(counts[0] == 3 && counts[1] == 1 && counts[2] == 1);
     printf("[PASS] Smooth WRR distributed 5 requests in exact 3:1:1 ratio.\n");
 
+    // Test 7: IP Hash consistency
+    route.strategy = STRATEGY_IP_HASH;
+    const BackendServer *ip1_a = router_select_backend_ip_hash(&route, "192.168.1.100");
+    const BackendServer *ip1_b = router_select_backend_ip_hash(&route, "192.168.1.100");
+    assert(ip1_a != NULL && ip1_a == ip1_b);
+    printf("[PASS] IP-Hash sticky session consistently maps identical IP to same backend.\n");
+
     printf("[PASS] test_router passed all test cases successfully.\n");
     return 0;
 }
