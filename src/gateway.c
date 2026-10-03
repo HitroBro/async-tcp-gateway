@@ -307,12 +307,16 @@ size_t metrics_format_prometheus(const GatewayConfig *config, char *out_buf, siz
         "gateway_bytes_written_total %lu\n"
         "# HELP gateway_failed_connections_total Failed connections\n"
         "# TYPE gateway_failed_connections_total counter\n"
-        "gateway_failed_connections_total %lu\n",
+        "gateway_failed_connections_total %lu\n"
+        "# HELP gateway_flow_control_pauses_total Flow control pause events\n"
+        "# TYPE gateway_flow_control_pauses_total counter\n"
+        "gateway_flow_control_pauses_total %lu\n",
         (unsigned long)g_metrics.total_connections,
         (unsigned long)g_metrics.active_connections,
         (unsigned long)g_metrics.total_bytes_read,
         (unsigned long)g_metrics.total_bytes_written,
-        (unsigned long)g_metrics.failed_connections);
+        (unsigned long)g_metrics.failed_connections,
+        (unsigned long)g_metrics.flow_control_pauses);
     return (written > 0 && (size_t)written < max_len) ? (size_t)written : 0;
 }
 
