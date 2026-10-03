@@ -101,6 +101,16 @@ static inline void buf_free(IOBuffer *buf) {
     }
 }
 
+static inline int buf_is_above_high_watermark(const IOBuffer *buf) {
+    if (!buf || buf->capacity == 0) return 0;
+    return (buf_available_data(buf) * 100 / buf->capacity) >= BUF_HIGH_WATERMARK_PERCENT;
+}
+
+static inline int buf_is_below_low_watermark(const IOBuffer *buf) {
+    if (!buf || buf->capacity == 0) return 1;
+    return (buf_available_data(buf) * 100 / buf->capacity) <= BUF_LOW_WATERMARK_PERCENT;
+}
+
 static inline void buf_reset(IOBuffer *buf) {
     buf->head = 0;
     buf->tail = 0;
