@@ -326,6 +326,7 @@ void metrics_dump(const GatewayConfig *config) {
     LOG_INFO("Backend failures: %" PRIu64, g_metrics.backend_failures);
     LOG_INFO("Health probes initiated: %" PRIu64, g_metrics.health_probes);
     LOG_INFO("Health probe successes: %" PRIu64, g_metrics.health_probe_successes);
+    LOG_INFO("Flow control pauses triggered: %" PRIu64, g_metrics.flow_control_pauses);
     
     if (config) {
         LOG_INFO("--- Route Status ---");
