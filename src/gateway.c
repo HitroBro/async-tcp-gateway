@@ -280,6 +280,10 @@ void metrics_increment_health_probes(void) {
     atomic_fetch_add(&g_metrics.health_probes, 1);
 }
 
+void metrics_increment_flow_control_pauses(void) {
+    atomic_fetch_add(&g_metrics.flow_control_pauses, 1);
+}
+
 void metrics_increment_health_probe_success(void) {
     atomic_fetch_add(&g_metrics.health_probe_successes, 1);
 }
