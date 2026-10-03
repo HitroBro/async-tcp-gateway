@@ -623,6 +623,10 @@ static void process_socket_write(int epoll_fd, ConnectionContext *ctx, int to_fd
         metrics_add_bytes_written(bytes);
     }
 
+    // Adaptive flow control: clear read pause state when drained
+    if (from_fd == ctx->client_fd) ctx->client_read_paused = 0;
+    else ctx->backend_read_paused = 0;
+
     // Buffer fully drained! Reset alignment tracking back to zero offsets
     buf_reset(buf);
 
