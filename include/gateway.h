@@ -175,6 +175,8 @@ struct ConnectionContext {
 
     int active_index;         // O(1) position index inside active_connections array
     char client_ip[INET6_ADDRSTRLEN]; // Client IP address string for sticky session routing
+    int client_read_paused;           // Flow control: 1 if client EPOLLIN paused due to buffer congestion
+    int backend_read_paused;          // Flow control: 1 if backend EPOLLIN paused due to buffer congestion
 };
 
 static inline int conn_is_half_closed(const ConnectionContext *ctx) {
