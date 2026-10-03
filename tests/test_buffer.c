@@ -112,6 +112,16 @@ int main(void) {
     test_boundary_wrap();
     test_circular_wrap_and_drain();
     test_saturation_stress();
+    IOBuffer wbuf;
+    buf_init(&wbuf, 100);
+    assert(buf_is_below_low_watermark(&wbuf));
+    assert(!buf_is_above_high_watermark(&wbuf));
+    wbuf.tail = 80; // 80% full
+    assert(buf_is_above_high_watermark(&wbuf));
+    assert(!buf_is_below_low_watermark(&wbuf));
+    buf_free(&wbuf);
+    printf("[PASS] Watermark percentage calculation helpers verified.\n");
+
     printf("[PASS] All ring buffer boundary and circular tests passed.\n");
     return 0;
 }
