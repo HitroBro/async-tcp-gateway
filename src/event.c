@@ -674,7 +674,7 @@ static void update_epoll_interests(int epoll_fd, EndpointToken *token, uint32_t 
 
     ev.data.ptr = token; // Maintain our token pointer linkage in the kernel union!
 
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, token->fd, &ev) < 0) {
+    if (token->fd >= 0 && epoll_ctl(epoll_fd, EPOLL_CTL_MOD, token->fd, &ev) < 0) {
         LOG_ERROR("Failed to update epoll interests on FD %d: %s", token->fd, strerror(errno));
     }
 }
