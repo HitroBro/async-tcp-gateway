@@ -128,6 +128,7 @@ typedef struct {
     _Atomic uint64_t backend_failures;
     _Atomic uint64_t health_probes;
     _Atomic uint64_t health_probe_successes;
+    _Atomic uint64_t flow_control_pauses;
 } GatewayMetrics;
 
 extern GatewayMetrics g_metrics;
