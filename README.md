@@ -168,6 +168,12 @@ Sending a `SIGHUP` signal (`kill -HUP <pid>`) triggers an in-place configuration
 
 `strategy = ip_hash` hashes the client's IPv4/IPv6 source address via FNV-1a, providing deterministic backend stickiness while gracefully falling over to adjacent healthy servers if a node goes down.
 
+### Adaptive Flow Control & Watermarks
+
+High/low watermark flow control dynamically modulates socket read interest:
+- **75% capacity:** Source `EPOLLIN` is suspended to prevent buffer overrun.
+- **25% capacity:** Source `EPOLLIN` is resumed once egress drains.
+
 ## ⚙️ Configuration
 
 Create a config file (e.g., `config/gateway.conf`):
