@@ -583,8 +583,15 @@ static void process_socket_read(int epoll_fd, ConnectionContext *ctx, int from_f
         }
 
         buf_advance_tail(buf, bytes);
-        ctx->last_activity = get_monotonic_secs();  // H2: Use monotonic clock
+        ctx->last_activity = get_monotonic_secs();
         metrics_add_bytes_read(bytes);
+
+        if (buf_is_above_high_watermark(buf)) {
+            // Adaptive flow control: pause source socket
+            if (from_fd == ctx->client_fd) ctx->client_read_paused = 1;
+            else ctx->backend_read_paused = 1;
+            atomic_fetch_add(&g_metrics.flow_control_pauses, 1);
+        }
         
         // Optimize: Attempt immediate transmission pass to maximize network throughput
         process_socket_write(epoll_fd, ctx, to_fd, from_fd, buf);
