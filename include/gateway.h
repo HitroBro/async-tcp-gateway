@@ -9,6 +9,8 @@
 // Forward declare constants from config.h to avoid duplication
 // #define IO_BUFFER_SIZE 8192
 // #define CONNECTION_IDLE_TIMEOUT_SECS 30
+#define BUF_HIGH_WATERMARK_PERCENT 75
+#define BUF_LOW_WATERMARK_PERCENT 25
 
 typedef enum {
     CONN_STATE_CONNECTING,  // Backend connection initiated, waiting for handshake
