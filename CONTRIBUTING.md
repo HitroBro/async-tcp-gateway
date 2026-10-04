@@ -154,3 +154,4 @@ clang-tidy src/*.c -- -Iinclude -std=c11
 Open a Discussion or email the maintainer.
 
 Thank you for contributing!
+<!-- v0.3.0 verified guidelines -->
