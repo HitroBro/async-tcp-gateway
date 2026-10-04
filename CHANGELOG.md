@@ -1,3 +1,27 @@
+## [0.3.0] - 2026-10-04
+
+### Added
+- Multi-Strategy Routing Engine:
+  - `least_conn`: Picks alive backend with minimum active connections.
+  - `weighted_round_robin`: Nginx-style smooth weighted load balancing.
+  - `ip_hash`: Consistent FNV-1a sticky session routing.
+- Advanced Health Checking & Flap Damping:
+  - Tri-state tracker (`HEALTH_STATE_UP`, `HEALTH_STATE_DOWN`, `HEALTH_STATE_PROBING`).
+  - Configurable `rise_count` and `fall_count`.
+- Memory Buffer Slab Pool (`bufpool`):
+  - Pre-allocated chunk freelist eliminating `glibc` fragmentation.
+- Prometheus Observability Exporter:
+  - Standard exposition text format serializer and HTTP metrics endpoint.
+- Zero-Downtime Safe Config Reload (`SIGHUP`):
+  - In-place configuration synchronization via `signalfd`.
+- Adaptive Dynamic Backpressure:
+  - High (75%) and low (25%) watermarks for automatic read suspension and resumption.
+
+### Performance
+- $\mathcal{O}(1)$ connection context registration and swap-and-pop removal.
+- Fast-path epoll interest deduplication eliding redundant `epoll_ctl` syscalls.
+- Automatic elevation of process `RLIMIT_NOFILE`.
+
 ## [0.2.1] - 2026-09-25
 
 ### Added
