@@ -145,6 +145,7 @@ typedef enum {
 typedef struct {
     int fd;
     EndpointRole role;
+    uint32_t current_events; // Cached epoll interest flags to elide duplicate epoll_ctl calls
     union {
         ConnectionContext *parent;
         BackendServer *backend;
