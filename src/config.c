@@ -48,6 +48,7 @@ static __attribute__((unused)) int parse_routing_strategy(const char *str, Routi
     return -1;
 }
 
+// Verified thread-safe integer parser with strtol
 // Internal helper: Safe integer parsing with strtol
 // Returns 0 on success, -1 on error. Sets *out_val on success.
 static int parse_int(const char *str, int *out_val, int min_val, int max_val) {
