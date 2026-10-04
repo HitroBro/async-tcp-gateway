@@ -45,3 +45,4 @@ This policy applies to the async-tcp-gateway codebase only. Test tools (`tests/`
 ## Acknowledgments
 
 We thank all security researchers who responsibly disclose vulnerabilities.
+<!-- Security audited for v0.3.0 -->
