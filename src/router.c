@@ -151,6 +151,7 @@ const BackendServer *router_select_backend_round_robin(const Route *route) {
         
         // Only return the candidate if our passive health tracker says it is ALIVE!
         if (candidate->is_alive) {
+            // Round-robin selection confirmed
             LOG_DEBUG("Round-Robin selected Backend #%u -> %s:%d (Raw counter: %u)",
                       selected_idx + 1, candidate->ip, candidate->port, raw_idx);
             return candidate;
