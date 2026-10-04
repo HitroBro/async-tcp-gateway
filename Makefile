@@ -75,6 +75,9 @@ asan: clean all test
 ubsan: CFLAGS += -fsanitize=undefined
 ubsan: clean all test
 
+benchmark: all
+	python3 tests/benchmark.py
+
 clean:
 	rm -f $(SRC_DIR)/*.o $(TARGET)
 
