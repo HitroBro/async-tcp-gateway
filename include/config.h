@@ -87,6 +87,7 @@ typedef struct {
     // M3: Rate limiting configuration
     int max_connections_per_sec;
     int max_connections_per_ip_per_sec;
+    int max_connections_per_ip_burst;  // Peak burst capacity for per-IP rate limiter
     RoutingStrategy default_strategy;  // Global default routing strategy
     int probe_interval_secs;           // Health probe timer interval in seconds
     int socket_sndbuf_size;            // Optional custom SO_SNDBUF size
