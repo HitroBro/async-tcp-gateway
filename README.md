@@ -175,6 +175,10 @@ High/low watermark flow control dynamically modulates socket read interest:
 - **75% capacity:** Source `EPOLLIN` is suspended to prevent buffer overrun.
 - **25% capacity:** Source `EPOLLIN` is resumed once egress drains.
 
+### Rate Limiting & Burst Protection
+
+Per-IP connection limits can be configured with an optional peak burst ceiling (`max_connections_per_ip_burst`) to gracefully absorb legitimate connection spikes while throttling sustained abusive floods.
+
 ## ⚙️ Configuration
 
 Create a config file (e.g., `config/gateway.conf`):
