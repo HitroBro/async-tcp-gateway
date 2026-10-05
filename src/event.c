@@ -84,6 +84,9 @@ int event_loop_run(const GatewayConfig *config) {
     
     // Initialize scalable dual-stack per-IP rate limiter
     ip_ratelimit_init(&g_ip_limiter, RATE_LIMIT_MAX_ENTRIES, RATE_LIMIT_DEFAULT_TTL);
+    if (config->max_connections_per_ip_burst > 0) {
+        g_ip_limiter.burst_capacity = config->max_connections_per_ip_burst;
+    }
 
     // Create and register a listener for each route
     for (int r = 0; r < config->route_count; r++) {
