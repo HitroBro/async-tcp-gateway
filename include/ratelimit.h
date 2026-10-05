@@ -26,6 +26,7 @@ typedef struct {
     IPRateEntry *table[RATE_LIMIT_HASH_SIZE];
     int total_entries;
     int max_entries;
+    int burst_capacity; // Allowed burst tokens beyond refill rate
     time_t ttl_secs;
 } IPRateLimiter;
 
