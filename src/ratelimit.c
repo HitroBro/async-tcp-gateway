@@ -34,6 +34,7 @@ void ip_ratelimit_init(IPRateLimiter *limiter, int max_entries, time_t ttl_secs)
     memset(limiter->table, 0, sizeof(limiter->table));
     limiter->total_entries = 0;
     limiter->max_entries = (max_entries > 0) ? max_entries : RATE_LIMIT_MAX_ENTRIES;
+    limiter->burst_capacity = 0;
     limiter->ttl_secs = (ttl_secs > 0) ? ttl_secs : RATE_LIMIT_DEFAULT_TTL;
 }
 
