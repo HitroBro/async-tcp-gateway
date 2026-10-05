@@ -57,6 +57,11 @@ int main(void) {
     ip_ratelimit_cleanup(&ttl_limiter);
 
 
+    // Test burst capacity setting
+    limiter.burst_capacity = 50;
+    assert(limiter.burst_capacity == 50);
+    printf("[PASS] Burst capacity verification passed.\n");
+
     printf("[PASS] test_ratelimit unit tests passed.\n");
     return 0;
 }
