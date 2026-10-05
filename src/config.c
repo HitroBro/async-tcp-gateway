@@ -150,6 +150,7 @@ int config_load(const char *filepath, GatewayConfig *config) {
     // M3: Rate limiting defaults
     config->max_connections_per_sec = DEFAULT_MAX_CONNECTIONS_PER_SEC;
     config->max_connections_per_ip_per_sec = DEFAULT_MAX_CONNECTIONS_PER_IP_PER_SEC;
+    config->max_connections_per_ip_burst = 0;
 
     char line[MAX_LINE_LEN];
     Route *current_route = NULL;
@@ -247,6 +248,10 @@ int config_load(const char *filepath, GatewayConfig *config) {
                     } else if (strcmp(key, "max_connections_per_ip_per_sec") == 0) {
                         if (parse_int(val, &config->max_connections_per_ip_per_sec, 1, 10000) != 0) {
                             LOG_WARN("Invalid max_connections_per_ip_per_sec value '%s' on line %d. Using default %d.", val, line_num, DEFAULT_MAX_CONNECTIONS_PER_IP_PER_SEC);
+                        }
+                    } else if (strcmp(key, "max_connections_per_ip_burst") == 0) {
+                        if (parse_int(val, &config->max_connections_per_ip_burst, 1, 20000) != 0) {
+                            LOG_WARN("Invalid max_connections_per_ip_burst on line %d.", line_num);
                         }
                     } else if (strcmp(key, "probe_interval_secs") == 0) {
                         if (parse_int(val, &config->probe_interval_secs, 1, 3600) != 0) {
