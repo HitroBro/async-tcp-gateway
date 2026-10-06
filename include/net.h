@@ -2,6 +2,7 @@
 #define NET_H
 
 #include <sys/types.h>
+#include "config.h"
 
 // Creates a dual-stack (IPv4/IPv6) listener socket with optional SO_REUSEPORT
 // Supports both IPv4 and IPv6 (dual-stack).
@@ -43,6 +44,7 @@ int net_set_tcp_nodelay(int sockfd, int enable);
 // max_probes: number of unacknowledged probes before dropping (0 = system default)
 // Returns 0 on success, -1 on failure.
 int net_set_keepalive(int sockfd, int idle_secs, int interval_secs, int max_probes);
+int net_apply_keepalive_config(int sockfd, const GatewayConfig *config);
 
 // Elevates process file descriptor limits (RLIMIT_NOFILE) to support high connection counts
 int net_tune_rlimit_nofile(int target_nofile);
