@@ -367,7 +367,7 @@ static void handle_listener_event(int epoll_fd, EndpointToken *token, const Gate
 
         // H3: Apply TCP_NODELAY and SO_KEEPALIVE for low latency and dead connection detection
         net_set_tcp_nodelay(client_fd, 1);
-        net_set_keepalive(client_fd, 30, 10, 3);
+        net_apply_keepalive_config(client_fd, config);
         if (config->socket_sndbuf_size > 0 || config->socket_rcvbuf_size > 0) {
             net_set_buffer_sizes(client_fd, config->socket_sndbuf_size, config->socket_rcvbuf_size);
         }
