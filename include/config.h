@@ -88,6 +88,9 @@ typedef struct {
     int max_connections_per_sec;
     int max_connections_per_ip_per_sec;
     int max_connections_per_ip_burst;  // Peak burst capacity for per-IP rate limiter
+    int tcp_keepalive_idle_secs;       // TCP keepalive idle seconds before probes
+    int tcp_keepalive_interval_secs;   // TCP keepalive probe interval in seconds
+    int tcp_keepalive_probes;          // TCP keepalive max unacknowledged probes
     RoutingStrategy default_strategy;  // Global default routing strategy
     int probe_interval_secs;           // Health probe timer interval in seconds
     int socket_sndbuf_size;            // Optional custom SO_SNDBUF size
