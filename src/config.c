@@ -151,6 +151,9 @@ int config_load(const char *filepath, GatewayConfig *config) {
     config->max_connections_per_sec = DEFAULT_MAX_CONNECTIONS_PER_SEC;
     config->max_connections_per_ip_per_sec = DEFAULT_MAX_CONNECTIONS_PER_IP_PER_SEC;
     config->max_connections_per_ip_burst = 0;
+    config->tcp_keepalive_idle_secs = 30;
+    config->tcp_keepalive_interval_secs = 10;
+    config->tcp_keepalive_probes = 3;
 
     char line[MAX_LINE_LEN];
     Route *current_route = NULL;
