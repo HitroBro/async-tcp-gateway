@@ -335,3 +335,11 @@ int net_set_buffer_sizes(int fd, int sndbuf, int rcvbuf) {
     }
     return 0;
 }
+
+int net_apply_keepalive_config(int sockfd, const GatewayConfig *config) {
+    if (sockfd < 0 || !config) return -1;
+    int idle = (config->tcp_keepalive_idle_secs > 0) ? config->tcp_keepalive_idle_secs : 30;
+    int intvl = (config->tcp_keepalive_interval_secs > 0) ? config->tcp_keepalive_interval_secs : 10;
+    int probes = (config->tcp_keepalive_probes > 0) ? config->tcp_keepalive_probes : 3;
+    return net_set_keepalive(sockfd, idle, intvl, probes);
+}
