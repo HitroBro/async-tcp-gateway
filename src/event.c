@@ -33,6 +33,7 @@ static TokenBucket global_bucket;
 
 // Scalable hash table rate limiter with IPv4/IPv6 support and TTL eviction
 static IPRateLimiter g_ip_limiter;
+static const GatewayConfig *g_config = NULL;
 
 // Internal forward declarations for event processing helpers
 static void handle_listener_event(int epoll_fd, EndpointToken *token, const GatewayConfig *config);
@@ -70,6 +71,7 @@ static inline time_t get_monotonic_secs(void) {
 }
 
 int event_loop_run(const GatewayConfig *config) {
+    g_config = config;
     int epoll_fd = epoll_create1(0);
     if (epoll_fd < 0) {
         LOG_ERROR("Fatal: epoll_create1 failed: %s", strerror(errno));
@@ -434,6 +436,8 @@ static int initiate_backend_connection(int epoll_fd, ConnectionContext *ctx) {
         // Use the successfully connected socket
         ctx->backend_fd = fd;
         ctx->backend_token.fd = fd;
+        net_set_tcp_nodelay(fd, 1);
+        net_apply_keepalive_config(fd, g_config);
 
         // If we got here, either connect succeeded immediately or EINPROGRESS
         if (ret == 0) {
