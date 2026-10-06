@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "net.h"
+#include <string.h>
 #include <stdio.h>
 #include <assert.h>
 #include <unistd.h>
@@ -15,6 +16,19 @@ int main(void) {
     assert(net_set_buffer_sizes(fds[0], 32768, 32768) == 0);
     close(fds[0]);
     close(fds[1]);
+
+    GatewayConfig kcfg;
+    memset(&kcfg, 0, sizeof(GatewayConfig));
+    kcfg.tcp_keepalive_idle_secs = 45;
+    kcfg.tcp_keepalive_interval_secs = 15;
+    kcfg.tcp_keepalive_probes = 5;
+
+    int sv[2];
+    assert(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
+    assert(net_apply_keepalive_config(sv[0], &kcfg) == 0);
+    close(sv[0]);
+    close(sv[1]);
+    printf("[PASS] net_apply_keepalive_config verified successfully.\n");
 
     printf("[PASS] test_net unit tests passed successfully.\n");
     return 0;
