@@ -256,6 +256,18 @@ int config_load(const char *filepath, GatewayConfig *config) {
                         if (parse_int(val, &config->max_connections_per_ip_burst, 1, 20000) != 0) {
                             LOG_WARN("Invalid max_connections_per_ip_burst on line %d.", line_num);
                         }
+                    } else if (strcmp(key, "tcp_keepalive_idle_secs") == 0) {
+                        if (parse_int(val, &config->tcp_keepalive_idle_secs, 1, 7200) != 0) {
+                            LOG_WARN("Invalid tcp_keepalive_idle_secs on line %d.", line_num);
+                        }
+                    } else if (strcmp(key, "tcp_keepalive_interval_secs") == 0) {
+                        if (parse_int(val, &config->tcp_keepalive_interval_secs, 1, 300) != 0) {
+                            LOG_WARN("Invalid tcp_keepalive_interval_secs on line %d.", line_num);
+                        }
+                    } else if (strcmp(key, "tcp_keepalive_probes") == 0) {
+                        if (parse_int(val, &config->tcp_keepalive_probes, 1, 30) != 0) {
+                            LOG_WARN("Invalid tcp_keepalive_probes on line %d.", line_num);
+                        }
                     } else if (strcmp(key, "probe_interval_secs") == 0) {
                         if (parse_int(val, &config->probe_interval_secs, 1, 3600) != 0) {
                             LOG_WARN("Invalid probe_interval_secs on line %d. Using default 5.", line_num);
