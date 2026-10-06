@@ -179,6 +179,13 @@ High/low watermark flow control dynamically modulates socket read interest:
 
 Per-IP connection limits can be configured with an optional peak burst ceiling (`max_connections_per_ip_burst`) to gracefully absorb legitimate connection spikes while throttling sustained abusive floods.
 
+### TCP Keepalive Customization
+
+TCP keepalives can be tuned per environment to proactively detect silent connection drops:
+- `tcp_keepalive_idle_secs`: Idle timeout before first probe is dispatched (default: 30s)
+- `tcp_keepalive_interval_secs`: Probe interval cadence (default: 10s)
+- `tcp_keepalive_probes`: Maximum unanswered probe retries before teardown (default: 3)
+
 ## ⚙️ Configuration
 
 Create a config file (e.g., `config/gateway.conf`):
