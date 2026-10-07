@@ -301,3 +301,27 @@ void router_handle_probe_event(int epoll_fd, EndpointToken *token, uint32_t even
     backend->probe_fd = -1;
     free(token);
 }
+#include <stdio.h>
+
+int router_format_http_probe(char *buf, size_t max_len, const char *host, const char *path) {
+    if (!buf || max_len == 0) return -1;
+    const char *h = (host && host[0]) ? host : "127.0.0.1";
+    const char *p = (path && path[0]) ? path : "/healthz";
+    int n = snprintf(buf, max_len,
+                     "GET %s HTTP/1.1\r\n"
+                     "Host: %s\r\n"
+                     "User-Agent: Gateway-HealthProbe/1.0\r\n"
+                     "Connection: close\r\n\r\n",
+                     p, h);
+    return (n > 0 && (size_t)n < max_len) ? n : -1;
+}
+
+int router_validate_http_probe_response(const char *resp, size_t len) {
+    if (!resp || len < 12) return 0;
+    // Inspect HTTP status line: e.g. "HTTP/1.1 200" or "HTTP/1.0 200"
+    if (strncmp(resp, "HTTP/1.", 7) == 0 && resp[8] == ' ') {
+        int status = (resp[9] - '0') * 100 + (resp[10] - '0') * 10 + (resp[11] - '0');
+        if (status >= 200 && status < 400) return 1; // 2xx or 3xx status
+    }
+    return 0;
+}
