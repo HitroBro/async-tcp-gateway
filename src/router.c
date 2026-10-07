@@ -320,6 +320,7 @@ int router_validate_http_probe_response(const char *resp, size_t len) {
     if (!resp || len < 12) return 0;
     // Inspect HTTP status line: e.g. "HTTP/1.1 200" or "HTTP/1.0 200"
     if (strncmp(resp, "HTTP/1.", 7) == 0 && resp[8] == ' ') {
+        if (resp[9] < '0' || resp[9] > '9' || resp[10] < '0' || resp[10] > '9' || resp[11] < '0' || resp[11] > '9') return 0;
         int status = (resp[9] - '0') * 100 + (resp[10] - '0') * 10 + (resp[11] - '0');
         if (status >= 200 && status < 400) return 1; // 2xx or 3xx status
     }
