@@ -16,6 +16,10 @@ const BackendServer *router_select_backend_wrr(const Route *route);
 // IP-Hash consistent session routing
 const BackendServer *router_select_backend_ip_hash(const Route *route, const char *client_ip);
 
+// Active Health Probe HTTP helpers
+int router_format_http_probe(char *buf, size_t max_len, const char *host, const char *path);
+int router_validate_http_probe_response(const char *resp, size_t len);
+
 // Least-Connections backend selection (selects alive backend with minimum active_connections)
 const BackendServer *router_select_backend_least_conn(const Route *route);
 
