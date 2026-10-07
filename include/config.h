@@ -30,6 +30,11 @@ typedef enum {
 } BackendHealthState;
 
 typedef enum {
+    PROBE_TYPE_TCP = 0,
+    PROBE_TYPE_HTTP = 1
+} HealthProbeType;
+
+typedef enum {
     STRATEGY_ROUND_ROBIN = 0,
     STRATEGY_LEAST_CONN = 1,
     STRATEGY_WEIGHTED_ROUND_ROBIN = 2,
