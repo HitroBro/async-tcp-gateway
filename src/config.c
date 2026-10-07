@@ -274,6 +274,15 @@ int config_load(const char *filepath, GatewayConfig *config) {
                         if (parse_int(val, &config->probe_interval_secs, 1, 3600) != 0) {
                             LOG_WARN("Invalid probe_interval_secs on line %d. Using default 5.", line_num);
                         }
+                    } else if (strcmp(key, "probe_type") == 0) {
+                        if (strcasecmp(val, "http") == 0) {
+                            config->probe_type = PROBE_TYPE_HTTP;
+                        } else {
+                            config->probe_type = PROBE_TYPE_TCP;
+                        }
+                    } else if (strcmp(key, "probe_path") == 0) {
+                        strncpy(config->probe_path, val, sizeof(config->probe_path) - 1);
+                        config->probe_path[sizeof(config->probe_path) - 1] = '\0';
                     } else if (strcmp(key, "rise_count") == 0) {
                 if (parse_int(val, &current_route->rise_count, 1, 100) != 0) {
                     LOG_WARN("Invalid rise_count on line %d.", line_num);
