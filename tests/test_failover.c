@@ -66,6 +66,21 @@ int main(void) {
     assert(route.backends[0].health_state == HEALTH_STATE_UP);
     printf("[PASS] Backend health state correctly restored to HEALTH_STATE_UP.\n");
 
+    // Test HTTP health probe request formatter
+    char pbuf[256];
+    int plen = router_format_http_probe(pbuf, sizeof(pbuf), "backend1.local", "/healthz");
+    assert(plen > 0);
+    assert(strstr(pbuf, "GET /healthz HTTP/1.1") != NULL);
+    assert(strstr(pbuf, "Host: backend1.local") != NULL);
+    printf("[PASS] router_format_http_probe verified successfully.\n");
+
+    // Test HTTP health probe response validator
+    const char *valid_resp = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK";
+    assert(router_validate_http_probe_response(valid_resp, strlen(valid_resp)) == 1);
+    const char *err_resp = "HTTP/1.1 503 Service Unavailable\r\n\r\n";
+    assert(router_validate_http_probe_response(err_resp, strlen(err_resp)) == 0);
+    printf("[PASS] router_validate_http_probe_response verified successfully.\n");
+
     printf("[PASS] test_failover unit test passed.\n");
     return 0;
 }
