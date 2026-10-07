@@ -186,6 +186,15 @@ TCP keepalives can be tuned per environment to proactively detect silent connect
 - `tcp_keepalive_interval_secs`: Probe interval cadence (default: 10s)
 - `tcp_keepalive_probes`: Maximum unanswered probe retries before teardown (default: 3)
 
+### Synthetic HTTP Health Probing
+
+In addition to TCP handshake probing, the gateway supports synthetic HTTP health checks:
+```ini
+probe_type = http
+probe_path = /healthz
+```
+Backends returning HTTP status `2xx` or `3xx` are maintained in `HEALTH_STATE_UP`, while `5xx` errors trigger immediate flap-damping fall counters.
+
 ## ⚙️ Configuration
 
 Create a config file (e.g., `config/gateway.conf`):
