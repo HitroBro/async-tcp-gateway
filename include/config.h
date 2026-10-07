@@ -101,6 +101,8 @@ typedef struct {
     int socket_sndbuf_size;            // Optional custom SO_SNDBUF size
     int socket_rcvbuf_size;            // Optional custom SO_RCVBUF size
     int metrics_port;                  // Prometheus metrics HTTP exporter port (0 = disabled)
+    HealthProbeType probe_type;        // Health probe protocol (PROBE_TYPE_TCP or PROBE_TYPE_HTTP)
+    char probe_path[128];              // HTTP health probe request URI path
 } GatewayConfig;
 
 int config_load(const char *filepath, GatewayConfig *config);
