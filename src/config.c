@@ -147,6 +147,8 @@ int config_load(const char *filepath, GatewayConfig *config) {
     config->default_strategy = STRATEGY_ROUND_ROBIN;
     config->probe_interval_secs = 5;
     config->metrics_port = 0;
+    config->probe_type = PROBE_TYPE_TCP;
+    strncpy(config->probe_path, "/healthz", sizeof(config->probe_path) - 1);
     // M3: Rate limiting defaults
     config->max_connections_per_sec = DEFAULT_MAX_CONNECTIONS_PER_SEC;
     config->max_connections_per_ip_per_sec = DEFAULT_MAX_CONNECTIONS_PER_IP_PER_SEC;
