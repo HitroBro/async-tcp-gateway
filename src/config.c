@@ -149,6 +149,7 @@ int config_load(const char *filepath, GatewayConfig *config) {
     config->metrics_port = 0;
     config->probe_type = PROBE_TYPE_TCP;
     strncpy(config->probe_path, "/healthz", sizeof(config->probe_path) - 1);
+    config->access_log_enabled = 0;
     // M3: Rate limiting defaults
     config->max_connections_per_sec = DEFAULT_MAX_CONNECTIONS_PER_SEC;
     config->max_connections_per_ip_per_sec = DEFAULT_MAX_CONNECTIONS_PER_IP_PER_SEC;
@@ -283,6 +284,10 @@ int config_load(const char *filepath, GatewayConfig *config) {
                     } else if (strcmp(key, "probe_path") == 0) {
                         strncpy(config->probe_path, val, sizeof(config->probe_path) - 1);
                         config->probe_path[sizeof(config->probe_path) - 1] = '\0';
+                    } else if (strcmp(key, "access_log_enabled") == 0) {
+                        if (parse_int(val, &config->access_log_enabled, 0, 1) != 0) {
+                            LOG_WARN("Invalid access_log_enabled on line %d.", line_num);
+                        }
                     } else if (strcmp(key, "rise_count") == 0) {
                 if (parse_int(val, &current_route->rise_count, 1, 100) != 0) {
                     LOG_WARN("Invalid rise_count on line %d.", line_num);
