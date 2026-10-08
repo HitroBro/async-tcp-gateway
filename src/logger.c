@@ -41,3 +41,23 @@ void log_message(LogLevel level, const char *format, ...) {
     fprintf(out_stream, "\n");
     fflush(out_stream);
 }
+
+int access_log_format_json(char *buf, size_t max_len,
+                           const char *client_ip, int client_fd,
+                           const char *backend_ip, int backend_port,
+                           uint64_t bytes_in, uint64_t bytes_out,
+                           double duration_secs) {
+    if (!buf || max_len == 0) return -1;
+    const char *cip = (client_ip && client_ip[0]) ? client_ip : "unknown";
+    const char *bip = (backend_ip && backend_ip[0]) ? backend_ip : "none";
+
+    int n = snprintf(buf, max_len,
+        "{\"type\":\"access\",\"client_ip\":\"%s\",\"client_fd\":%d,"
+        "\"backend_ip\":\"%s\",\"backend_port\":%d,\"bytes_in\":%lu,"
+        "\"bytes_out\":%lu,\"duration_ms\":%.2f}\n",
+        cip, client_fd, bip, backend_port,
+        (unsigned long)bytes_in, (unsigned long)bytes_out,
+        duration_secs * 1000.0);
+
+    return (n > 0 && (size_t)n < max_len) ? n : -1;
+}
