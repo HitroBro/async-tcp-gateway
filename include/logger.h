@@ -15,7 +15,17 @@ typedef enum {
 // Default: LOG_DEBUG (all messages)
 extern LogLevel g_log_level;
 
+#include <stddef.h>
+#include <stdint.h>
+
 void log_message(LogLevel level, const char *format, ...);
+
+// Formats a structured JSON access log entry for a completed client connection
+int access_log_format_json(char *buf, size_t max_len,
+                           const char *client_ip, int client_fd,
+                           const char *backend_ip, int backend_port,
+                           uint64_t bytes_in, uint64_t bytes_out,
+                           double duration_secs);
 void log_set_level(LogLevel level);
 
 #define LOG_INFO(...)  do { if (LOG_INFO <= g_log_level)  log_message(LOG_INFO, __VA_ARGS__); } while(0)
