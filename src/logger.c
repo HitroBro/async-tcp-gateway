@@ -59,5 +59,7 @@ int access_log_format_json(char *buf, size_t max_len,
         (unsigned long)bytes_in, (unsigned long)bytes_out,
         duration_secs * 1000.0);
 
+    // Ensure clean string termination
+    buf[max_len - 1] = '\0';
     return (n > 0 && (size_t)n < max_len) ? n : -1;
 }
