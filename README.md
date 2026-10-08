@@ -195,6 +195,13 @@ probe_path = /healthz
 ```
 Backends returning HTTP status `2xx` or `3xx` are maintained in `HEALTH_STATE_UP`, while `5xx` errors trigger immediate flap-damping fall counters.
 
+### Structured JSON Access Logging
+
+Enabling `access_log_enabled = 1` streams standard JSON access events containing client IP, backend peer, byte volumes, and connection latency:
+```json
+{"type":"access","client_ip":"192.168.1.50","client_fd":12,"backend_ip":"10.0.0.1","backend_port":8080,"bytes_in":1024,"bytes_out":4096,"duration_ms":125.00}
+```
+
 ## ⚙️ Configuration
 
 Create a config file (e.g., `config/gateway.conf`):
