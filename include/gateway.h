@@ -208,6 +208,10 @@ void metrics_dump(const GatewayConfig *config);
 
 // Formats gateway metrics in standard Prometheus exposition text format
 size_t metrics_format_prometheus(const GatewayConfig *config, char *out_buf, size_t max_len);
+
+// HTTP Liveness and Readiness status serializers (Kubernetes compatible)
+int gateway_format_healthz(char *out_buf, size_t max_len);
+int gateway_format_readyz(const GatewayConfig *config, char *out_buf, size_t max_len);
 void metrics_increment_connections(void);
 void metrics_decrement_connections(void);
 void metrics_increment_failed(void);
