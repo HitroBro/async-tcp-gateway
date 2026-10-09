@@ -202,6 +202,12 @@ Enabling `access_log_enabled = 1` streams standard JSON access events containing
 {"type":"access","client_ip":"192.168.1.50","client_fd":12,"backend_ip":"10.0.0.1","backend_port":8080,"bytes_in":1024,"bytes_out":4096,"duration_ms":125.00}
 ```
 
+### Kubernetes Liveness & Readiness Endpoints
+
+The gateway exposes standard `/healthz` (liveness) and `/readyz` (readiness) HTTP endpoints:
+- **`/healthz`**: Responds `200 OK` when the epoll event loop is healthy and accepting operations.
+- **`/readyz`**: Evaluates all configured route upstream backend pools; returns `503 Service Unavailable` if any route has exhausted all healthy backends.
+
 ## ⚙️ Configuration
 
 Create a config file (e.g., `config/gateway.conf`):
