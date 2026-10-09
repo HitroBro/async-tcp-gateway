@@ -320,6 +320,16 @@ size_t metrics_format_prometheus(const GatewayConfig *config, char *out_buf, siz
     return (written > 0 && (size_t)written < max_len) ? (size_t)written : 0;
 }
 
+
+int gateway_format_healthz(char *out_buf, size_t max_len) {
+    if (!out_buf || max_len == 0) return -1;
+    return snprintf(out_buf, max_len,
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "Content-Length: 2\r\n"
+                    "Connection: close\r\n\r\n"
+                    "OK\n");
+}
 void metrics_dump(const GatewayConfig *config) {
     LOG_INFO("=== GATEWAY METRICS ===");
     LOG_INFO("Total connections accepted: %" PRIu64, g_metrics.total_connections);
