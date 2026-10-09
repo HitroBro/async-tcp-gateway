@@ -330,6 +330,40 @@ int gateway_format_healthz(char *out_buf, size_t max_len) {
                     "Connection: close\r\n\r\n"
                     "OK\n");
 }
+
+int gateway_format_readyz(const GatewayConfig *config, char *out_buf, size_t max_len) {
+    if (!out_buf || max_len == 0) return -1;
+
+    int ready = 1;
+    if (config) {
+        for (int r = 0; r < config->route_count; r++) {
+            int alive_count = 0;
+            for (int b = 0; b < config->routes[r].backend_count; b++) {
+                if (config->routes[r].backends[b].is_alive) alive_count++;
+            }
+            if (alive_count == 0 && config->routes[r].backend_count > 0) {
+                ready = 0; // Route has zero healthy upstream backends
+                break;
+            }
+        }
+    }
+
+    if (ready) {
+        return snprintf(out_buf, max_len,
+                        "HTTP/1.1 200 OK\r\n"
+                        "Content-Type: text/plain\r\n"
+                        "Content-Length: 5\r\n"
+                        "Connection: close\r\n\r\n"
+                        "READY\n");
+    } else {
+        return snprintf(out_buf, max_len,
+                        "HTTP/1.1 503 Service Unavailable\r\n"
+                        "Content-Type: text/plain\r\n"
+                        "Content-Length: 9\r\n"
+                        "Connection: close\r\n\r\n"
+                        "NOT_READY\n");
+    }
+}
 void metrics_dump(const GatewayConfig *config) {
     LOG_INFO("=== GATEWAY METRICS ===");
     LOG_INFO("Total connections accepted: %" PRIu64, g_metrics.total_connections);
