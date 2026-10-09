@@ -321,6 +321,7 @@ size_t metrics_format_prometheus(const GatewayConfig *config, char *out_buf, siz
 }
 
 
+// Standard HTTP 1.1 formatting for Kubernetes health checks
 int gateway_format_healthz(char *out_buf, size_t max_len) {
     if (!out_buf || max_len == 0) return -1;
     return snprintf(out_buf, max_len,
