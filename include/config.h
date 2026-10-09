@@ -104,6 +104,7 @@ typedef struct {
     HealthProbeType probe_type;        // Health probe protocol (PROBE_TYPE_TCP or PROBE_TYPE_HTTP)
     char probe_path[128];              // HTTP health probe request URI path
     int access_log_enabled;            // Emit structured JSON access logs (0 = disabled, 1 = enabled)
+    int health_status_port;            // Dedicated HTTP health status listener port
 } GatewayConfig;
 
 int config_load(const char *filepath, GatewayConfig *config);
