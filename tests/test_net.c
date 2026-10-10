@@ -30,6 +30,13 @@ int main(void) {
     close(sv[1]);
     printf("[PASS] net_apply_keepalive_config verified successfully.\n");
 
+    int lsock = socket(AF_INET, SOCK_STREAM, 0);
+    assert(lsock >= 0);
+    // Attempt TFO (may succeed or return -1 depending on kernel settings, ensure non-crashing)
+    net_enable_tcp_fastopen(lsock, 10);
+    close(lsock);
+    printf("[PASS] net_enable_tcp_fastopen sanity test passed.\n");
+
     printf("[PASS] test_net unit tests passed successfully.\n");
     return 0;
 }
