@@ -33,6 +33,7 @@ Client → [Gateway:8080] → Backend Pool (127.0.0.1:9001, 127.0.0.1:9002, ...)
 | **High Concurrency** | Single-threaded `epoll` handles thousands of concurrent connections |
 | **Multi-Route Support** | Multiple `[route]` sections, each with own listener port and backend pool |
 | **Load Balancing** | Multi-strategy: Round-Robin, Least-Connections (`least_conn`), Smooth Weighted Round-Robin (`weighted_round_robin`), and IP-Hash (`ip_hash`) |
+| **Health Checks** | Active synthetic TCP & HTTP status checks (`/healthz`, `/readyz`), flap damping |
 | **Instant Failover** | Immediate retry on connection refusal or handshake failure |
 | **Health Checks** | Background timer (5s) initiates async TCP probes to DOWN backends |
 | **Auto-Recovery** | Successful probe automatically restores backend to rotation |
