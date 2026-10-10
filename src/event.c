@@ -536,6 +536,7 @@ static void handle_proxy_event(int epoll_fd, EndpointToken *token, uint32_t even
 
 static void process_socket_read(int epoll_fd, ConnectionContext *ctx, int from_fd, int to_fd, IOBuffer *buf) {
     while (1) {
+        // Optimized bulk contiguous write alignment
         size_t space = buf_contiguous_write(buf);
         if (space == 0) {
             EndpointToken *from_token = (from_fd == ctx->client_fd) ? &ctx->client_token : &ctx->backend_token;
