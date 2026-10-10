@@ -105,6 +105,7 @@ typedef struct {
     char probe_path[128];              // HTTP health probe request URI path
     int access_log_enabled;            // Emit structured JSON access logs (0 = disabled, 1 = enabled)
     int health_status_port;            // Dedicated HTTP health status listener port
+    int tcp_fastopen;                  // Enable TCP Fast Open (TFO) on listeners (0 = disabled, 1 = enabled)
 } GatewayConfig;
 
 int config_load(const char *filepath, GatewayConfig *config);
