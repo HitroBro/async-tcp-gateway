@@ -331,3 +331,4 @@ MIT License — Feel free to use, modify, and distribute.
 3. Ensure `make` builds cleanly (`-Wall -Wextra -pedantic -std=c11`)
 4. Test with the provided Python test suite
 5. Submit a pull request
+<!-- Release v0.4.0 finalized -->
