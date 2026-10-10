@@ -343,3 +343,18 @@ int net_apply_keepalive_config(int sockfd, const GatewayConfig *config) {
     int probes = (config->tcp_keepalive_probes > 0) ? config->tcp_keepalive_probes : 3;
     return net_set_keepalive(sockfd, idle, intvl, probes);
 }
+
+#ifndef TCP_FASTOPEN
+#define TCP_FASTOPEN 23
+#endif
+
+int net_enable_tcp_fastopen(int sockfd, int qlen) {
+    if (sockfd < 0) return -1;
+    int q = (qlen > 0) ? qlen : 5;
+    if (setsockopt(sockfd, IPPROTO_TCP, TCP_FASTOPEN, &q, sizeof(q)) < 0) {
+        LOG_DEBUG("setsockopt TCP_FASTOPEN not supported or failed on FD %d: %s", sockfd, strerror(errno));
+        return -1;
+    }
+    LOG_INFO("TCP Fast Open enabled on FD %d with queue length %d", sockfd, q);
+    return 0;
+}
