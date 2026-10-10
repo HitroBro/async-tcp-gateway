@@ -1,3 +1,17 @@
+## [0.4.0] - 2026-10-10
+
+### Added
+- Dynamic Connection Rate Limiter Burst Windows (`max_connections_per_ip_burst`).
+- Fine-Grained TCP Keepalive Tuning (`tcp_keepalive_idle_secs`, `tcp_keepalive_interval_secs`, `tcp_keepalive_probes`).
+- Active HTTP Synthetic Health Checks (`probe_type = http`, `probe_path`).
+- Structured JSON Access Logger (`access_log_enabled`) with millisecond connection duration metrics.
+- Kubernetes-compatible `/healthz` (liveness) and `/readyz` (readiness) HTTP endpoints.
+- TCP Fast Open (TFO) socket acceleration (`tcp_fastopen = 1`).
+
+### Performance & Security
+- Bulk contiguous write alignment optimizations.
+- Hardened bounds verification for all timeout and buffer threshold inputs.
+
 ## [0.3.0] - 2026-10-04
 
 ### Added
