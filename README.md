@@ -4,7 +4,7 @@
 [![Linux](https://img.shields.io/badge/Linux-epoll%20%7C%20timerfd%20%7C%20signalfd-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://man7.org/linux/man-pages/man7/epoll.7.html)
 [![CI](https://github.com/HitroBro/async-tcp-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/HitroBro/async-tcp-gateway/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
-[![Release](https://img.shields.io/badge/release-v0.3.0-blueviolet?style=for-the-badge)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/release-v0.4.0-blueviolet?style=for-the-badge)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/tests-Python%20suite-orange?style=for-the-badge&logo=python)](tests/)
 
 A high-concurrency, asynchronous **Layer 4 TCP gateway/proxy** written in C using `epoll`. Features round-robin load balancing, automatic failover, asynchronous health checks with auto-recovery, configurable limits, IPv6 dual-stack support, and metrics/observability.
