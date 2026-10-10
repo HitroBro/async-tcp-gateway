@@ -48,6 +48,7 @@ static __attribute__((unused)) int parse_routing_strategy(const char *str, Routi
     return -1;
 }
 
+// Hardened bounds validation for timeout thresholds
 // Verified thread-safe integer parser with strtol
 // Internal helper: Safe integer parsing with strtol
 // Returns 0 on success, -1 on error. Sets *out_val on success.
