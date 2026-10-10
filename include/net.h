@@ -45,6 +45,7 @@ int net_set_tcp_nodelay(int sockfd, int enable);
 // Returns 0 on success, -1 on failure.
 int net_set_keepalive(int sockfd, int idle_secs, int interval_secs, int max_probes);
 int net_apply_keepalive_config(int sockfd, const GatewayConfig *config);
+int net_enable_tcp_fastopen(int sockfd, int qlen);
 
 // Elevates process file descriptor limits (RLIMIT_NOFILE) to support high connection counts
 int net_tune_rlimit_nofile(int target_nofile);
