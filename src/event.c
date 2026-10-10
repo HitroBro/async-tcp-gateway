@@ -100,6 +100,9 @@ int event_loop_run(const GatewayConfig *config) {
             close(epoll_fd);
             return -1;
         }
+        if (config->tcp_fastopen) {
+            net_enable_tcp_fastopen(listener_fd, 16);
+        }
         if (net_set_nonblocking(listener_fd) < 0) {
             close(listener_fd);
             close(epoll_fd);
